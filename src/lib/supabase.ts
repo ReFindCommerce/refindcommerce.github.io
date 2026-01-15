@@ -6,9 +6,11 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const TABLE_NAME = 'inbox_messages';
+
 export async function fetchMessages(threadId: string): Promise<Message[]> {
   const { data, error } = await supabase
-    .from('messages')
+    .from(TABLE_NAME)
     .select('*')
     .eq('thread_id', threadId)
     .order('uploaded_at', { ascending: true });
@@ -27,7 +29,7 @@ export async function fetchConversations(filters?: {
   message_to?: string[];
 }): Promise<Conversation[]> {
   let query = supabase
-    .from('messages')
+    .from(TABLE_NAME)
     .select('*')
     .order('uploaded_at', { ascending: false });
 
@@ -119,7 +121,7 @@ export async function uploadImage(file: File): Promise<string | null> {
 
 export async function getLatestAiReply(threadId: string): Promise<string | null> {
   const { data, error } = await supabase
-    .from('messages')
+    .from(TABLE_NAME)
     .select('ai_reply')
     .eq('thread_id', threadId)
     .order('uploaded_at', { ascending: false })
@@ -136,7 +138,7 @@ export async function getLatestAiReply(threadId: string): Promise<string | null>
 
 export async function getDistinctValues(column: 'channel' | 'thread_id' | 'message_to'): Promise<string[]> {
   const { data, error } = await supabase
-    .from('messages')
+    .from(TABLE_NAME)
     .select(column);
 
   if (error) {

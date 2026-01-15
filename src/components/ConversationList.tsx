@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Channel, FilterOptions } from '@/types/inbox';
 import { ConversationItem } from './ConversationItem';
 import { FilterPanel } from './FilterPanel';
@@ -24,9 +24,10 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     thread_ids: [],
     message_to: [],
   });
+  const isFirstLoad = useRef(true);
 
-  const loadConversations = async () => {
-    setLoading(true);
+  const loadConversations = async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     const data = await fetchConversations({
       channels: filters.channels.length > 0 ? filters.channels : undefined,
       thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
@@ -34,15 +35,16 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     });
     setConversations(data);
     setLoading(false);
+    isFirstLoad.current = false;
   };
 
   useEffect(() => {
-    loadConversations();
+    loadConversations(true);
   }, [filters]);
 
-  // Refresh every 10 seconds
+  // Silent refresh every 10 seconds
   useEffect(() => {
-    const interval = setInterval(loadConversations, 10000);
+    const interval = setInterval(() => loadConversations(false), 10000);
     return () => clearInterval(interval);
   }, [filters]);
 
@@ -72,11 +74,11 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             <Button
               variant="ghost"
               size="icon"
-              onClick={loadConversations}
+              onClick={() => loadConversations(true)}
               className="h-8 w-8"
               title="Refresh"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              <RefreshCw className="w-4 h-4" />
             </Button>
             <Button
               variant={hasActiveFilters ? "default" : "ghost"}
