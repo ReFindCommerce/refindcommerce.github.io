@@ -22,7 +22,7 @@ const Index = () => {
       {/* Conversation List - Hidden on mobile when chat is open */}
       <div
         className={cn(
-          'w-full md:w-[380px] lg:w-[420px] shrink-0 h-full',
+          'w-full md:w-[420px] lg:w-[480px] shrink-0 h-full',
           showChat && 'hidden md:flex md:flex-col'
         )}
       >

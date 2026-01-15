@@ -9,29 +9,38 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
+  
+  // Get content based on direction
   const content = isOutbound ? message.final_reply : message.user_message;
-  const imageUrl = isOutbound ? message.agent_image_url : message.customer_image_url;
+  
+  // Get image URL - check both fields regardless of direction
+  const imageUrl = message.customer_image_url || message.agent_image_url;
+  const isCustomerImage = !!message.customer_image_url;
 
+  // If no content and no image, don't render
   if (!content && !imageUrl) return null;
+
+  // Determine alignment based on image ownership or message direction
+  const alignRight = imageUrl ? !isCustomerImage : isOutbound;
 
   return (
     <div
       className={cn(
         'flex flex-col max-w-[75%] animate-fade-in',
-        isOutbound ? 'ml-auto items-end' : 'mr-auto items-start'
+        alignRight ? 'ml-auto items-end' : 'mr-auto items-start'
       )}
     >
       {imageUrl && (
         <div
           className={cn(
-            'rounded-2xl overflow-hidden mb-1 shadow-sm',
-            isOutbound ? 'bg-message-outbound' : 'bg-message-inbound'
+            'rounded-2xl overflow-hidden mb-1 shadow-sm p-1',
+            alignRight ? 'bg-message-outbound' : 'bg-message-inbound'
           )}
         >
           <img
             src={imageUrl}
             alt="Message attachment"
-            className="max-w-full max-h-64 object-contain"
+            className="max-w-full max-h-64 object-contain rounded-xl"
             loading="lazy"
           />
         </div>
@@ -41,7 +50,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         <div
           className={cn(
             'px-4 py-2 rounded-2xl shadow-sm',
-            isOutbound
+            alignRight
               ? 'bg-message-outbound text-message-outbound-foreground rounded-br-md'
               : 'bg-message-inbound text-message-inbound-foreground rounded-bl-md'
           )}
