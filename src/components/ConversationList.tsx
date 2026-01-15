@@ -115,7 +115,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
       )}
 
       {/* Conversations */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 [&>div>div]:!overflow-visible">
         {loading && conversations.length === 0 ? (
           <div className="flex items-center justify-center h-32">
             <RefreshCw className="w-6 h-6 text-muted-foreground animate-spin" />
@@ -126,7 +126,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             <p className="text-sm">No conversations found</p>
           </div>
         ) : (
-          <div className="py-2">
+          <div className="py-2 pr-2">
             {filteredConversations.map((conversation) => (
               <ConversationItem
                 key={conversation.thread_id}
