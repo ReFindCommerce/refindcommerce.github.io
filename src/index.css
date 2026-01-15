@@ -51,8 +51,8 @@
     /* Message bubbles */
     --message-inbound: 220 10% 96%;
     --message-inbound-foreground: 220 15% 15%;
-    --message-outbound: 220 15% 20%;
-    --message-outbound-foreground: 0 0% 98%;
+    --message-outbound: 210 100% 92%;
+    --message-outbound-foreground: 220 15% 15%;
 
     /* Status */
     --status-new: 142 70% 45%;
