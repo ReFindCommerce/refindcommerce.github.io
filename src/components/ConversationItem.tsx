@@ -1,6 +1,6 @@
 import React from 'react';
 import { Conversation } from '@/types/inbox';
-import { getChannelColorClass, getChannelBadgeClass, getChannelIcon, formatTime, formatDate } from '@/lib/channelUtils';
+import { getChannelColorClass, getChannelBadgeClass, getChannelIcon, getDisplayChannel, getChannelDisplayName, formatTime, formatDate } from '@/lib/channelUtils';
 import { cn } from '@/lib/utils';
 
 interface ConversationItemProps {
@@ -10,9 +10,13 @@ interface ConversationItemProps {
 }
 
 export function ConversationItem({ conversation, isSelected, onClick }: ConversationItemProps) {
-  const channelColor = getChannelColorClass(conversation.channel);
-  const badgeClass = getChannelBadgeClass(conversation.channel);
-  const channelIcon = getChannelIcon(conversation.channel);
+  // Determine display channel based on thread_id for Gmail
+  const displayChannel = getDisplayChannel(conversation.channel, conversation.thread_id);
+  
+  const channelColor = getChannelColorClass(displayChannel);
+  const badgeClass = getChannelBadgeClass(displayChannel);
+  const channelIcon = getChannelIcon(displayChannel);
+  const channelName = getChannelDisplayName(displayChannel);
   
   return (
     <div
@@ -42,8 +46,8 @@ export function ConversationItem({ conversation, isSelected, onClick }: Conversa
       
       {/* Row 3: Channel badge + Status + From */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full capitalize', badgeClass)}>
-          {conversation.channel}
+        <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', badgeClass)}>
+          {channelName}
         </span>
         <span className={cn(
           'px-2 py-0.5 text-xs font-bold rounded-full uppercase',

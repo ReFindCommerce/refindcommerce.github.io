@@ -1,6 +1,29 @@
 import { Channel } from '@/types/inbox';
 
-export function getChannelColorClass(channel: Channel): string {
+export type DisplayChannel = Channel | 'tiktok shop' | 'amazon' | 'ebay';
+
+// Detect marketplace from thread_id for Gmail messages
+export function getDisplayChannel(channel: Channel, threadId?: string): DisplayChannel {
+  if (channel.toLowerCase() !== 'gmail' || !threadId) {
+    return channel;
+  }
+  
+  const threadLower = threadId.toLowerCase();
+  
+  if (threadLower.includes('tiktok')) {
+    return 'tiktok shop';
+  }
+  if (threadLower.includes('amazon')) {
+    return 'amazon';
+  }
+  if (threadLower.includes('ebay')) {
+    return 'ebay';
+  }
+  
+  return channel;
+}
+
+export function getChannelColorClass(channel: DisplayChannel): string {
   const channelLower = channel.toLowerCase();
   
   switch (channelLower) {
@@ -19,7 +42,7 @@ export function getChannelColorClass(channel: Channel): string {
   }
 }
 
-export function getChannelBadgeClass(channel: Channel): string {
+export function getChannelBadgeClass(channel: DisplayChannel): string {
   const channelLower = channel.toLowerCase();
   
   switch (channelLower) {
@@ -38,7 +61,7 @@ export function getChannelBadgeClass(channel: Channel): string {
   }
 }
 
-export function getChannelIcon(channel: Channel): string {
+export function getChannelIcon(channel: DisplayChannel): string {
   const channelLower = channel.toLowerCase();
   
   switch (channelLower) {
@@ -54,6 +77,25 @@ export function getChannelIcon(channel: Channel): string {
       return '🎵';
     default:
       return '💬';
+  }
+}
+
+export function getChannelDisplayName(channel: DisplayChannel): string {
+  const channelLower = channel.toLowerCase();
+  
+  switch (channelLower) {
+    case 'whatsapp':
+      return 'WhatsApp';
+    case 'gmail':
+      return 'Gmail';
+    case 'amazon':
+      return 'Amazon';
+    case 'ebay':
+      return 'eBay';
+    case 'tiktok shop':
+      return 'TikTok Shop';
+    default:
+      return channel;
   }
 }
 
