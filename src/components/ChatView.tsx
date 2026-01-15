@@ -88,21 +88,34 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     try {
       let agentImageUrl: string | null = null;
 
-      // Upload image if selected
+      // Upload image if selected - convert to base64 and send directly
       if (selectedImage) {
         setUploadingImage(true);
-        agentImageUrl = await uploadImage(selectedImage);
-        setUploadingImage(false);
         
-        if (!agentImageUrl) {
+        try {
+          // Convert image to base64
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(selectedImage);
+          });
+          
+          // Use base64 directly as the image URL
+          agentImageUrl = base64;
+        } catch (error) {
+          console.error('Error converting image:', error);
           toast({
             title: 'Error',
-            description: 'Failed to upload image. Please try again.',
+            description: 'Failed to process image. Please try again.',
             variant: 'destructive',
           });
           setSending(false);
+          setUploadingImage(false);
           return;
         }
+        
+        setUploadingImage(false);
       }
 
       // Get the latest message data to use as base
