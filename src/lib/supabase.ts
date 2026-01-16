@@ -149,3 +149,46 @@ export async function getDistinctValues(column: 'channel' | 'thread_id' | 'messa
   const uniqueValues = [...new Set((data || []).map(item => item[column]).filter(Boolean))];
   return uniqueValues;
 }
+
+// Hidden threads management
+const HIDDEN_THREADS_TABLE = 'hidden_threads';
+
+export async function fetchHiddenThreadIds(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from(HIDDEN_THREADS_TABLE)
+    .select('thread_id');
+
+  if (error) {
+    console.error('Error fetching hidden threads:', error);
+    return [];
+  }
+
+  return (data || []).map(item => item.thread_id);
+}
+
+export async function addHiddenThreads(threadIds: string[]): Promise<void> {
+  if (threadIds.length === 0) return;
+
+  const rows = threadIds.map(thread_id => ({ thread_id }));
+  
+  const { error } = await supabase
+    .from(HIDDEN_THREADS_TABLE)
+    .upsert(rows, { onConflict: 'thread_id' });
+
+  if (error) {
+    console.error('Error adding hidden threads:', error);
+  }
+}
+
+export async function removeHiddenThreads(threadIds: string[]): Promise<void> {
+  if (threadIds.length === 0) return;
+
+  const { error } = await supabase
+    .from(HIDDEN_THREADS_TABLE)
+    .delete()
+    .in('thread_id', threadIds);
+
+  if (error) {
+    console.error('Error removing hidden threads:', error);
+  }
+}
