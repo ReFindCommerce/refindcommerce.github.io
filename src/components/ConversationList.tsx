@@ -22,6 +22,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   const [showFilters, setShowFilters] = useState(false);
   const [hideMode, setHideMode] = useState(false);
   const [selectedToHide, setSelectedToHide] = useState<string[]>([]);
+  const [hideSelectionInitialized, setHideSelectionInitialized] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     channels: [],
     thread_ids: [],
@@ -29,7 +30,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   });
   const isFirstLoad = useRef(true);
   
-  const { hiddenThreadIds, hideThreads, showThreads, isHidden } = useHiddenThreads();
+  const { hiddenThreadIds, hideThreads, showThreads, isHidden, loading: hiddenLoading } = useHiddenThreads();
 
   const loadConversations = async (showLoader = false) => {
     if (showLoader) setLoading(true);
@@ -54,10 +55,20 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   }, [filters]);
 
   const enterHideMode = () => {
-    // Pre-select currently hidden threads
-    setSelectedToHide([...hiddenThreadIds]);
+    // Start hide mode; selection will be initialized once hidden threads are loaded
     setHideMode(true);
+    setHideSelectionInitialized(false);
   };
+
+  useEffect(() => {
+    if (!hideMode) return;
+    if (hideSelectionInitialized) return;
+    if (hiddenLoading) return;
+
+    // Pre-select currently hidden threads (so checkmarks stay when re-opening)
+    setSelectedToHide([...hiddenThreadIds]);
+    setHideSelectionInitialized(true);
+  }, [hideMode, hideSelectionInitialized, hiddenLoading, hiddenThreadIds]);
 
   const exitHideMode = () => {
     // Apply hide changes
@@ -73,6 +84,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     
     setHideMode(false);
     setSelectedToHide([]);
+    setHideSelectionInitialized(false);
   };
 
   const toggleHideSelection = (threadId: string) => {

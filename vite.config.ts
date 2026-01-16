@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Ensure a single React instance is used everywhere
+      react: path.resolve(__dirname, "./node_modules/react"),
+      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
     },
+    // Prevent multiple React copies in the bundle (fixes hook dispatcher/queue errors)
+    dedupe: ["react", "react-dom"],
   },
 }));
