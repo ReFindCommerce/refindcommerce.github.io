@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FilterOptions, Channel } from '@/types/inbox';
 import { getDistinctValues } from '@/lib/supabase';
-import { X, Check } from 'lucide-react';
+import { X, Check, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,11 +11,13 @@ interface FilterPanelProps {
   filters: FilterOptions;
   onFiltersChange: (filters: FilterOptions) => void;
   onClose: () => void;
+  onEnterHideMode: () => void;
+  hiddenCount: number;
 }
 
 const ALL_CHANNELS: Channel[] = ['whatsapp', 'gmail', 'amazon', 'ebay', 'tiktok shop'];
 
-export function FilterPanel({ filters, onFiltersChange, onClose }: FilterPanelProps) {
+export function FilterPanel({ filters, onFiltersChange, onClose, onEnterHideMode, hiddenCount }: FilterPanelProps) {
   const [threadIds, setThreadIds] = useState<string[]>([]);
   const [messageTos, setMessageTos] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +70,20 @@ export function FilterPanel({ filters, onFiltersChange, onClose }: FilterPanelPr
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground">Filters</h3>
           <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onEnterHideMode}
+              className="gap-1"
+            >
+              <EyeOff className="w-4 h-4" />
+              Hide
+              {hiddenCount > 0 && (
+                <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                  {hiddenCount}
+                </Badge>
+              )}
+            </Button>
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear all
