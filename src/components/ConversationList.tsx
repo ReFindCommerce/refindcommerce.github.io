@@ -3,7 +3,8 @@ import { Conversation, Channel, FilterOptions } from '@/types/inbox';
 import { ConversationItem } from './ConversationItem';
 import { FilterPanel } from './FilterPanel';
 import { fetchConversations } from '@/lib/supabase';
-import { Search, Filter, Inbox, RefreshCw } from 'lucide-react';
+import { useHiddenThreads } from '@/hooks/useHiddenThreads';
+import { Search, Filter, Inbox, RefreshCw, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,12 +20,16 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [hideMode, setHideMode] = useState(false);
+  const [selectedToHide, setSelectedToHide] = useState<string[]>([]);
   const [filters, setFilters] = useState<FilterOptions>({
     channels: [],
     thread_ids: [],
     message_to: [],
   });
   const isFirstLoad = useRef(true);
+  
+  const { hiddenThreadIds, hideThreads, showThreads, isHidden } = useHiddenThreads();
 
   const loadConversations = async (showLoader = false) => {
     if (showLoader) setLoading(true);
@@ -48,7 +53,43 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     return () => clearInterval(interval);
   }, [filters]);
 
-  const filteredConversations = conversations.filter(conv => {
+  const enterHideMode = () => {
+    // Pre-select currently hidden threads
+    setSelectedToHide([...hiddenThreadIds]);
+    setHideMode(true);
+  };
+
+  const exitHideMode = () => {
+    // Apply hide changes
+    const toHide = selectedToHide.filter(id => !hiddenThreadIds.includes(id));
+    const toShow = hiddenThreadIds.filter(id => !selectedToHide.includes(id));
+    
+    if (toHide.length > 0) {
+      hideThreads(toHide);
+    }
+    if (toShow.length > 0) {
+      showThreads(toShow);
+    }
+    
+    setHideMode(false);
+    setSelectedToHide([]);
+  };
+
+  const toggleHideSelection = (threadId: string) => {
+    if (selectedToHide.includes(threadId)) {
+      setSelectedToHide(prev => prev.filter(id => id !== threadId));
+    } else {
+      setSelectedToHide(prev => [...prev, threadId]);
+    }
+  };
+
+  // In hide mode, show all conversations (including hidden) for selection
+  // In normal mode, filter out hidden conversations
+  const visibleConversations = hideMode 
+    ? conversations 
+    : conversations.filter(conv => !isHidden(conv.thread_id));
+
+  const filteredConversations = visibleConversations.filter(conv => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -70,27 +111,45 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             <Inbox className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-bold text-foreground">Inbox</h1>
           </div>
-          <div className="flex items-center gap-2">
+          {hideMode ? (
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => loadConversations(true)}
-              className="h-8 w-8"
-              title="Refresh"
+              variant="default"
+              size="sm"
+              onClick={exitHideMode}
+              className="gap-1"
             >
-              <RefreshCw className="w-4 h-4" />
+              <Check className="w-4 h-4" />
+              Done
             </Button>
-            <Button
-              variant={hasActiveFilters ? "default" : "ghost"}
-              size="icon"
-              onClick={() => setShowFilters(!showFilters)}
-              className="h-8 w-8"
-              title="Filter"
-            >
-              <Filter className="w-4 h-4" />
-            </Button>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => loadConversations(true)}
+                className="h-8 w-8"
+                title="Refresh"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={hasActiveFilters ? "default" : "ghost"}
+                size="icon"
+                onClick={() => setShowFilters(!showFilters)}
+                className="h-8 w-8"
+                title="Filter"
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
+        
+        {hideMode && (
+          <div className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md mb-4">
+            Выберите чаты для скрытия. Отмеченные чаты не будут показываться.
+          </div>
+        )}
         
         {/* Search */}
         <div className="relative">
@@ -106,11 +165,13 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
       </div>
 
       {/* Filter Panel */}
-      {showFilters && (
+      {showFilters && !hideMode && (
         <FilterPanel
           filters={filters}
           onFiltersChange={setFilters}
           onClose={() => setShowFilters(false)}
+          onEnterHideMode={enterHideMode}
+          hiddenCount={hiddenThreadIds.length}
         />
       )}
 
@@ -128,12 +189,35 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
         ) : (
           <div className="py-2 pr-2">
             {filteredConversations.map((conversation) => (
-              <ConversationItem
-                key={conversation.thread_id}
-                conversation={conversation}
-                isSelected={selectedThreadId === conversation.thread_id}
-                onClick={() => onSelectConversation(conversation)}
-              />
+              <div key={conversation.thread_id} className="relative">
+                {hideMode && (
+                  <div 
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleHideSelection(conversation.thread_id);
+                    }}
+                  >
+                    <div className={cn(
+                      "w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all",
+                      selectedToHide.includes(conversation.thread_id)
+                        ? "bg-destructive border-destructive text-destructive-foreground"
+                        : "bg-background border-muted-foreground/50 hover:border-primary"
+                    )}>
+                      {selectedToHide.includes(conversation.thread_id) && (
+                        <Check className="w-4 h-4" />
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className={cn(hideMode && "ml-8")}>
+                  <ConversationItem
+                    conversation={conversation}
+                    isSelected={selectedThreadId === conversation.thread_id}
+                    onClick={() => !hideMode && onSelectConversation(conversation)}
+                  />
+                </div>
+              </div>
             ))}
           </div>
         )}
