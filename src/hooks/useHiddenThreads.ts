@@ -1,41 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
-
-const STORAGE_KEY = 'hidden_thread_ids';
+import { fetchHiddenThreadIds, addHiddenThreads, removeHiddenThreads } from '@/lib/supabase';
 
 export function useHiddenThreads() {
   const [hiddenThreadIds, setHiddenThreadIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadHiddenThreads = useCallback(async () => {
+    const ids = await fetchHiddenThreadIds();
+    setHiddenThreadIds(ids);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setHiddenThreadIds(JSON.parse(stored));
-      } catch {
-        setHiddenThreadIds([]);
-      }
-    }
-  }, []);
+    loadHiddenThreads();
+  }, [loadHiddenThreads]);
 
-  const saveHiddenThreadIds = useCallback((ids: string[]) => {
-    setHiddenThreadIds(ids);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-  }, []);
-
-  const hideThreads = useCallback((threadIds: string[]) => {
+  const hideThreads = useCallback(async (threadIds: string[]) => {
     const newHidden = [...new Set([...hiddenThreadIds, ...threadIds])];
-    saveHiddenThreadIds(newHidden);
-  }, [hiddenThreadIds, saveHiddenThreadIds]);
+    setHiddenThreadIds(newHidden);
+    await addHiddenThreads(threadIds);
+  }, [hiddenThreadIds]);
 
-  const showThreads = useCallback((threadIds: string[]) => {
+  const showThreads = useCallback(async (threadIds: string[]) => {
     const newHidden = hiddenThreadIds.filter(id => !threadIds.includes(id));
-    saveHiddenThreadIds(newHidden);
-  }, [hiddenThreadIds, saveHiddenThreadIds]);
+    setHiddenThreadIds(newHidden);
+    await removeHiddenThreads(threadIds);
+  }, [hiddenThreadIds]);
 
-  const toggleThread = useCallback((threadId: string) => {
+  const toggleThread = useCallback(async (threadId: string) => {
     if (hiddenThreadIds.includes(threadId)) {
-      showThreads([threadId]);
+      await showThreads([threadId]);
     } else {
-      hideThreads([threadId]);
+      await hideThreads([threadId]);
     }
   }, [hiddenThreadIds, hideThreads, showThreads]);
 
@@ -49,5 +45,7 @@ export function useHiddenThreads() {
     showThreads,
     toggleThread,
     isHidden,
+    loading,
+    refresh: loadHiddenThreads,
   };
 }
