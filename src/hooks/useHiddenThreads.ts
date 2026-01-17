@@ -4,12 +4,17 @@ import { fetchHiddenThreadIds, addHiddenThreads, removeHiddenThreads } from '@/l
 export function useHiddenThreads() {
   const [hiddenThreadIds, setHiddenThreadIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadHiddenThreads = useCallback(async () => {
-    const ids = await fetchHiddenThreadIds();
-    setHiddenThreadIds(ids);
-    setLoading(false);
+    try {
+      const ids = await fetchHiddenThreadIds();
+      setHiddenThreadIds(ids);
+    } catch (error) {
+      console.error('Error loading hidden threads:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
