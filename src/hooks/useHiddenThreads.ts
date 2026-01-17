@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchHiddenThreadIds, addHiddenThreads, removeHiddenThreads } from '@/lib/supabase';
 
 export function useHiddenThreads() {
   const [hiddenThreadIds, setHiddenThreadIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadHiddenThreads = useCallback(async () => {
     const ids = await fetchHiddenThreadIds();
@@ -13,6 +14,15 @@ export function useHiddenThreads() {
 
   useEffect(() => {
     loadHiddenThreads();
+    
+    // Sync hidden threads every 5 seconds to keep in sync across devices
+    intervalRef.current = setInterval(loadHiddenThreads, 5000);
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
   }, [loadHiddenThreads]);
 
   const hideThreads = useCallback(async (threadIds: string[]) => {
