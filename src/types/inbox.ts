@@ -46,6 +46,6 @@ export const CHANNEL_WEBHOOKS: Record<string, string> = {
   whatsapp: 'https://n8n.srv1247903.hstgr.cloud/webhook/unified-inbox',
   gmail: 'https://n8n.srv1247903.hstgr.cloud/webhook/dd2988d5-fa00-443f-a7b9-3c7fb95d7367',
   amazon: 'https://n8n.srv1247903.hstgr.cloud/webhook/7e998505-6594-4c6d-8acc-c21a56e4823c',
-  ebay: 'https://n8n.srv1247903.hstgr.cloud/webhook/7e998505-6594-4c6d-8acc-c21a56e4823c',
-  'tiktok shop': 'https://n8n.srv1247903.hstgr.cloud/webhook/7e998505-6594-4c6d-8acc-c21a56e4823c',
+  ebay: 'https://n8n.srv1247903.hstgr.cloud/webhook/f2a6e6ac-bab0-4268-a01b-81452241cae8',
+  'tiktok shop': 'https://n8n.srv1247903.hstgr.cloud/webhook/13e53ba7-f73b-418a-950e-79932d41e54f',
 };
