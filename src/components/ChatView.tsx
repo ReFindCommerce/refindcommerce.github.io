@@ -145,6 +145,11 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         payload.agent_image_url = agentImageUrl;
       }
 
+      // Add eBay message ID if channel is ebay
+      if (channel === 'ebay' && latestMessage?.message_id_ebay) {
+        payload.message_id_ebay = latestMessage.message_id_ebay;
+      }
+
       // Send to webhook
       const response = await fetch(webhookUrl, {
         method: 'POST',
