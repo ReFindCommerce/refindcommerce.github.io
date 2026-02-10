@@ -23,6 +23,7 @@ export interface Message {
   customer_image_url: string | null;
   agent_image_url: string | null;
   message_id_ebay: string | null;
+  item_id_ebay: string | null;
 }
 
 export interface Conversation {

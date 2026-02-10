@@ -149,6 +149,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       if (channel === 'ebay' && latestMessage?.message_id_ebay) {
         payload.message_id_ebay = latestMessage.message_id_ebay;
       }
+      if (channel === 'ebay' && latestMessage?.item_id_ebay) {
+        payload.item_id_ebay = latestMessage.item_id_ebay;
+      }
 
       // Send to webhook
       const response = await fetch(webhookUrl, {
