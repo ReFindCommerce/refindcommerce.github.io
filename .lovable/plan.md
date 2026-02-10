@@ -1,36 +1,51 @@
 
 
-## Добавить поле item_id_ebay в webhook payload для eBay
+## Исправление: искать item_id_ebay и message_id_ebay по всем сообщениям треда
 
-### Что нужно сделать
+### Проблема
 
-Добавить новое поле `item_id_ebay` в интерфейс `Message` и включить его в payload при отправке на eBay webhook (аналогично тому, как уже сделано для `message_id_ebay`).
+Текущий код берёт `item_id_ebay` только из последнего сообщения в массиве:
 
-### Изменения
-
-**1. `src/types/inbox.ts`** — добавить поле в интерфейс Message:
 ```typescript
-message_id_ebay: string | null;
-item_id_ebay: string | null;  // новое поле
-```
-
-**2. `src/components/ChatView.tsx`** — добавить передачу `item_id_ebay` в payload рядом с существующей логикой для `message_id_ebay`:
-```typescript
-if (channel === 'ebay' && latestMessage?.message_id_ebay) {
-  payload.message_id_ebay = latestMessage.message_id_ebay;
-}
-// Добавить:
+const latestMessage = messages[messages.length - 1];
 if (channel === 'ebay' && latestMessage?.item_id_ebay) {
   payload.item_id_ebay = latestMessage.item_id_ebay;
 }
 ```
 
-### Итоговый payload для eBay
+Но из 10 сообщений в треде только 2 могут содержать `item_id_ebay`. Если последнее сообщение -- не одно из них, поле не попадает в payload.
 
-| Поле | Значение |
-|------|----------|
-| message_id_ebay | ID сообщения eBay (уже есть) |
-| item_id_ebay | ID товара eBay (новое) |
+### Решение
 
-Оба поля добавляются только для канала eBay и только если значение существует в базе данных.
+Вместо проверки только последнего сообщения, искать первое непустое значение среди всех сообщений треда (с конца, чтобы взять самое свежее):
+
+**Файл: `src/components/ChatView.tsx`**
+
+Заменить текущую логику для eBay полей:
+
+```typescript
+// Найти item_id_ebay и message_id_ebay среди всех сообщений (с конца — берём самое свежее)
+if (channel === 'ebay') {
+  const ebayMessageId = [...messages].reverse().find(m => m.message_id_ebay)?.message_id_ebay;
+  const ebayItemId = [...messages].reverse().find(m => m.item_id_ebay)?.item_id_ebay;
+
+  if (ebayMessageId) {
+    payload.message_id_ebay = ebayMessageId;
+  }
+  if (ebayItemId) {
+    payload.item_id_ebay = ebayItemId;
+  }
+}
+```
+
+### Что изменится
+
+| До | После |
+|----|-------|
+| Берёт `item_id_ebay` только из последнего сообщения | Ищет по всем сообщениям треда, берёт самое свежее непустое значение |
+| Аналогично для `message_id_ebay` | Аналогично исправлено |
+
+### Файлы для изменения
+
+Только один файл: `src/components/ChatView.tsx` -- заменить блок условий для eBay (строки ~148-153).
 
