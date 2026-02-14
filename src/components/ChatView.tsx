@@ -314,12 +314,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             placeholder="Type your reply..."
             className="min-h-[44px] max-h-[50vh] resize-y"
             rows={1}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
+            
           />
           
           <Button
