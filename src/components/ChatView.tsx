@@ -312,7 +312,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
             placeholder="Type your reply..."
-            className="min-h-[44px] max-h-32 resize-none"
+            className="min-h-[44px] max-h-[50vh] resize-y"
             rows={1}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
