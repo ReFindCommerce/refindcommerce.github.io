@@ -310,9 +310,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           
           <Textarea
             value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
+            onChange={(e) => {
+              setReplyText(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.5) + 'px';
+            }}
             placeholder="Type your reply..."
-            className="min-h-[44px] max-h-[50vh] resize-y"
+            className="min-h-[44px] max-h-[50vh] resize-y overflow-auto"
             rows={1}
             
           />
