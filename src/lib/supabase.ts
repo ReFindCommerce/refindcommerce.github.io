@@ -31,7 +31,7 @@ export async function fetchConversations(filters?: {
   let query = supabase
     .from(TABLE_NAME)
     .select('*')
-    .order('uploaded_at', { ascending: false });
+    .order('uploaded_at', { ascending: true });
 
   if (filters?.channels && filters.channels.length > 0) {
     query = query.in('channel', filters.channels);
@@ -75,7 +75,7 @@ export async function fetchConversations(filters?: {
       const msgTime = new Date(msg.uploaded_at).getTime();
       const existingTime = new Date(existing.last_message_time).getTime();
       
-      if (msgTime > existingTime) {
+      if (msgTime >= existingTime) {
         existing.last_message = msg.user_message || msg.final_reply || '';
         existing.last_message_time = msg.uploaded_at;
         // Use the status of the LATEST message
