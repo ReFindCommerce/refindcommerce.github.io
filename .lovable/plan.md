@@ -1,20 +1,30 @@
 
 
-## Обновление webhook URL-ов
+## Диагностика: статус NEW/ANSWERED не обновляется
 
-Замена всех webhook-адресов в файле `src/types/inbox.ts`:
+### Проблема
+Сортировка и отображение статусов `new`/`answered` перестали корректно работать.
 
-| Канал | Старый URL | Новый URL |
-|-------|-----------|-----------|
-| whatsapp | `https://n8n.srv1247903.hstgr.cloud/webhook/unified-inbox` | `https://n8n.srv1354140.hstgr.cloud/webhook/whatsapp` |
-| gmail | `https://n8n.srv1247903.hstgr.cloud/webhook/dd2988d5-...` | `https://n8n.srv1354140.hstgr.cloud/webhook/gmail` |
-| amazon | `https://n8n.srv1247903.hstgr.cloud/webhook/7e998505-...` | *(без изменений -- новый URL не указан)* |
-| ebay | `https://n8n.srv1247903.hstgr.cloud/webhook/f2a6e6ac-...` | `https://n8n.srv1354140.hstgr.cloud/webhook/ebay` |
-| tiktok shop | `https://n8n.srv1247903.hstgr.cloud/webhook/13e53ba7-...` | `https://n8n.srv1354140.hstgr.cloud/webhook/tiktokshop` |
+### Корневая причина
+В функции `fetchConversations` (файл `src/lib/supabase.ts`) статус определяется по последнему сообщению через сравнение `msgTime > existingTime`. Если несколько сообщений имеют **одинаковый timestamp** (что видно в данных - все сообщения имеют `2026-03-05T06:18:48.285799`), то сравнение `>` не срабатывает и статус остаётся от первого встреченного сообщения, а не от реально последнего.
 
-### Детали
+### Решение
 
-**Файл:** `src/types/inbox.ts` -- обновить объект `CHANNEL_WEBHOOKS`.
+**Файл: `src/lib/supabase.ts`** - строка ~67
 
-> Amazon webhook не был указан в запросе, поэтому останется прежним.
+Изменить условие с `>` на `>=`:
+
+```typescript
+if (msgTime >= existingTime) {
+```
+
+Это гарантирует, что при одинаковых timestamps статус будет обновлён последним обработанным сообщением (которое идёт позже в массиве, т.к. данные отсортированы по `uploaded_at desc` - значит нужно использовать `ascending: true` или инвертировать логику).
+
+Дополнительно: изменить сортировку запроса на `ascending: true`, чтобы последнее сообщение обрабатывалось последним и корректно перезаписывало статус:
+
+```typescript
+.order('uploaded_at', { ascending: true });
+```
+
+Это двухстрочное изменение в одном файле.
 
