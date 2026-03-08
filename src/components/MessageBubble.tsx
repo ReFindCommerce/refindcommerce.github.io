@@ -60,7 +60,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 : 'bg-message-inbound text-message-inbound-foreground rounded-bl-md'
             )}
           >
-            <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
+            <p className="text-sm whitespace-pre-wrap break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{content}</p>
           </div>
         )}
         

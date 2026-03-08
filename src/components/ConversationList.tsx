@@ -118,10 +118,10 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Header */}
       <div className="p-3 md:p-4 border-b border-sidebar-border">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3 md:mb-4">
           <div className="flex items-center gap-2">
-            <Inbox className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-bold text-foreground">Inbox</h1>
+            <Inbox className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+            <h1 className="text-lg md:text-xl font-bold text-foreground">Inbox</h1>
           </div>
           {hideMode ? (
             <Button
