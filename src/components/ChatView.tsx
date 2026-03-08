@@ -303,28 +303,29 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={sending}
-            className="shrink-0"
+            className="shrink-0 mb-0.5"
           >
             <ImagePlus className="w-5 h-5" />
           </Button>
           
-          <Textarea
-            value={replyText}
-            onChange={(e) => {
-              setReplyText(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.5) + 'px';
-            }}
-            placeholder="Type your reply..."
-            className="min-h-[44px] max-h-[50vh] resize-y overflow-auto"
-            rows={1}
-            
-          />
+          <div className="flex-1 min-w-0">
+            <Textarea
+              value={replyText}
+              onChange={(e) => {
+                setReplyText(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.4) + 'px';
+              }}
+              placeholder="Type your reply..."
+              className="min-h-[44px] max-h-[40vh] resize-none overflow-auto w-full"
+              rows={1}
+            />
+          </div>
           
           <Button
             onClick={handleSend}
             disabled={sending || (!replyText.trim() && !selectedImage)}
-            className="shrink-0"
+            className="shrink-0 mb-0.5"
           >
             {sending ? (
               <Loader2 className="w-5 h-5 animate-spin" />
