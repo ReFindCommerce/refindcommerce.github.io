@@ -266,10 +266,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-border bg-card">
+      <div className="p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
         {/* Image Preview */}
         {imagePreview && (
-          <div className="relative inline-block mb-3">
+          <div className="relative inline-block mb-3 shrink-0">
             <img
               src={imagePreview}
               alt="Selected"
@@ -289,7 +289,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </div>
         )}
         
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 min-h-0">
           <input
             type="file"
             ref={fileInputRef}
@@ -308,16 +308,16 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             <ImagePlus className="w-5 h-5" />
           </Button>
           
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
             <Textarea
               value={replyText}
               onChange={(e) => {
                 setReplyText(e.target.value);
                 e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.4) + 'px';
+                e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.35) + 'px';
               }}
               placeholder="Type your reply..."
-              className="min-h-[44px] max-h-[40vh] resize-none overflow-auto w-full"
+              className="min-h-[44px] max-h-[35vh] resize-none overflow-auto w-full"
               rows={1}
             />
           </div>
