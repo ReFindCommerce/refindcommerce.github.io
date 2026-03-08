@@ -266,7 +266,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-border bg-card">
+      <div className="p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
         {/* Image Preview */}
         {imagePreview && (
           <div className="relative inline-block mb-3">
