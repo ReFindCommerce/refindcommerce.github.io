@@ -22,7 +22,7 @@ export function ConversationItem({ conversation, isSelected, onClick }: Conversa
     <div
       onClick={onClick}
       className={cn(
-        'flex flex-col gap-2 p-3 cursor-pointer transition-all duration-200 rounded-lg mx-2 my-1 overflow-visible',
+        'flex flex-col gap-1.5 md:gap-2 p-2.5 md:p-3 cursor-pointer transition-all duration-200 rounded-lg mx-1 md:mx-2 my-1 overflow-hidden',
         channelColor,
         isSelected && 'ring-2 ring-primary shadow-md',
         'hover:shadow-sm hover:scale-[1.01]'

@@ -213,32 +213,32 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border bg-card">
+      <div className="flex items-center gap-2 p-3 md:p-4 border-b border-border bg-card">
         {onBack && (
-          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
+          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
         
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-lg">
+        <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-muted flex items-center justify-center text-base md:text-lg shrink-0">
             {channelIcon}
           </div>
           
           <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-foreground truncate">
+            <h2 className="font-semibold text-sm md:text-base text-foreground truncate">
               {conversation.sender_name}
             </h2>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground">
               <span className="truncate">{conversation.thread_id}</span>
             </div>
           </div>
           
-          <div className="flex flex-col items-end gap-1">
-            <Badge className={cn('capitalize', badgeClass)}>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <Badge className={cn('capitalize text-xs', badgeClass)}>
               {conversation.channel}
             </Badge>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] md:max-w-none">
               to: {conversation.message_to}
             </span>
           </div>
@@ -246,7 +246,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-3 md:p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
@@ -266,7 +266,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
+      <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
         {/* Image Preview */}
         {imagePreview && (
           <div className="relative inline-block mb-3 shrink-0">
