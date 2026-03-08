@@ -289,7 +289,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </div>
         )}
         
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 min-h-0">
           <input
             type="file"
             ref={fileInputRef}
