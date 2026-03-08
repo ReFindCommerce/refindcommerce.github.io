@@ -117,7 +117,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-3 md:p-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Inbox className="w-6 h-6 text-primary" />
