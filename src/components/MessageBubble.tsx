@@ -30,7 +30,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     <>
       <div
         className={cn(
-          'flex flex-col max-w-[75%] animate-fade-in',
+          'flex flex-col max-w-[85%] md:max-w-[75%] animate-fade-in overflow-hidden',
           alignRight ? 'ml-auto items-end' : 'mr-auto items-start'
         )}
       >
