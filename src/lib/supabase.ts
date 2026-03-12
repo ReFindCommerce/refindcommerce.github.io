@@ -31,6 +31,7 @@ export async function fetchConversations(filters?: {
   let query = supabase
     .from(TABLE_NAME)
     .select('*')
+    .order('updated_at', { ascending: true })
     .order('uploaded_at', { ascending: true });
 
   if (filters?.channels && filters.channels.length > 0) {
@@ -67,17 +68,17 @@ export async function fetchConversations(filters?: {
         message_to: msg.message_to,
         status: msg.status,
         last_message: msg.user_message || msg.final_reply || '',
-        last_message_time: msg.uploaded_at,
+        last_message_time: msg.updated_at,
         unread_count: msg.status === 'new' ? 1 : 0,
       });
     } else {
       // Update with latest message info - always use the most recent message's status
-      const msgTime = new Date(msg.uploaded_at).getTime();
+      const msgTime = new Date(msg.updated_at).getTime();
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
         existing.last_message = msg.user_message || msg.final_reply || '';
-        existing.last_message_time = msg.uploaded_at;
+        existing.last_message_time = msg.updated_at;
         // Use the status of the LATEST message
         existing.status = msg.status;
       }
