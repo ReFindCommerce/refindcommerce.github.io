@@ -68,7 +68,7 @@ export async function fetchConversations(filters?: {
         message_to: msg.message_to,
         status: msg.status,
         last_message: msg.user_message || msg.final_reply || '',
-        last_message_time: msg.uploaded_at,
+        last_message_time: msg.updated_at,
         unread_count: msg.status === 'new' ? 1 : 0,
       });
     } else {
