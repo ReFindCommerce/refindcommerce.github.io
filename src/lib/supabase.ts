@@ -28,25 +28,43 @@ export async function fetchConversations(filters?: {
   thread_ids?: string[];
   message_to?: string[];
 }): Promise<Conversation[]> {
-  let query = supabase
-    .from(TABLE_NAME)
-    .select('*')
-    .order('uploaded_at', { ascending: true })
-    .order('id', { ascending: true });
+  const applyFilters = (
+    query: ReturnType<typeof supabase.from<typeof TABLE_NAME>['select']>
+  ) => {
+    let filteredQuery = query;
 
-  if (filters?.channels && filters.channels.length > 0) {
-    query = query.in('channel', filters.channels);
+    if (filters?.channels && filters.channels.length > 0) {
+      filteredQuery = filteredQuery.in('channel', filters.channels);
+    }
+
+    if (filters?.thread_ids && filters.thread_ids.length > 0) {
+      filteredQuery = filteredQuery.in('thread_id', filters.thread_ids);
+    }
+
+    if (filters?.message_to && filters.message_to.length > 0) {
+      filteredQuery = filteredQuery.in('message_to', filters.message_to);
+    }
+
+    return filteredQuery;
+  };
+
+  let { data, error } = await applyFilters(
+    supabase
+      .from(TABLE_NAME)
+      .select('*')
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+  );
+
+  if (error?.code === '42703') {
+    ({ data, error } = await applyFilters(
+      supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .order('uploaded_at', { ascending: true })
+        .order('id', { ascending: true })
+    ));
   }
-
-  if (filters?.thread_ids && filters.thread_ids.length > 0) {
-    query = query.in('thread_id', filters.thread_ids);
-  }
-
-  if (filters?.message_to && filters.message_to.length > 0) {
-    query = query.in('message_to', filters.message_to);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching conversations:', error);
