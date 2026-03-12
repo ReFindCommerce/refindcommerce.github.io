@@ -28,9 +28,7 @@ export async function fetchConversations(filters?: {
   thread_ids?: string[];
   message_to?: string[];
 }): Promise<Conversation[]> {
-  const applyFilters = (
-    query: ReturnType<typeof supabase.from<typeof TABLE_NAME>['select']>
-  ) => {
+  const applyFilters = (query: any) => {
     let filteredQuery = query;
 
     if (filters?.channels && filters.channels.length > 0) {
