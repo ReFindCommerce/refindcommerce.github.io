@@ -31,6 +31,7 @@ export async function fetchConversations(filters?: {
   let query = supabase
     .from(TABLE_NAME)
     .select('*')
+    .order('updated_at', { ascending: true })
     .order('uploaded_at', { ascending: true });
 
   if (filters?.channels && filters.channels.length > 0) {
