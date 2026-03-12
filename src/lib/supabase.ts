@@ -66,9 +66,9 @@ export async function fetchConversations(filters?: {
         channel: msg.channel,
         message_from: msg.message_from,
         message_to: msg.message_to,
-        status: msg.status,
+        status: msg.direction === 'outbound' ? 'answered' : 'new',
         last_message: msg.user_message || msg.final_reply || '',
-        last_message_time: msg.updated_at,
+        last_message_time: msg.uploaded_at,
         unread_count: msg.status === 'new' ? 1 : 0,
       });
     } else {
