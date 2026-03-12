@@ -73,14 +73,13 @@ export async function fetchConversations(filters?: {
       });
     } else {
       // Update with latest message info - always use the most recent message's status
-      const msgTime = new Date(msg.updated_at).getTime();
+      const msgTime = new Date(msg.uploaded_at).getTime();
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
         existing.last_message = msg.user_message || msg.final_reply || '';
-        existing.last_message_time = msg.updated_at;
-        // Use the status of the LATEST message
-        existing.status = msg.status;
+        existing.last_message_time = msg.uploaded_at;
+        existing.status = msg.direction === 'outbound' ? 'answered' : 'new';
       }
       
       if (msg.status === 'new') {
