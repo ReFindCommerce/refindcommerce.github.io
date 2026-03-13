@@ -23,45 +23,63 @@ export async function fetchMessages(threadId: string): Promise<Message[]> {
   return data || [];
 }
 
+async function fetchAllRows(query: any): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  
+  while (true) {
+    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  
+  return allData;
+}
+
 export async function fetchConversations(filters?: {
   channels?: Channel[];
   thread_ids?: string[];
   message_to?: string[];
 }): Promise<Conversation[]> {
-  const applyFilters = (query: any) => {
-    let filteredQuery = query;
-
-    if (filters?.channels && filters.channels.length > 0) {
-      filteredQuery = filteredQuery.in('channel', filters.channels);
-    }
-
-    if (filters?.thread_ids && filters.thread_ids.length > 0) {
-      filteredQuery = filteredQuery.in('thread_id', filters.thread_ids);
-    }
-
-    if (filters?.message_to && filters.message_to.length > 0) {
-      filteredQuery = filteredQuery.in('message_to', filters.message_to);
-    }
-
-    return filteredQuery;
-  };
-
-  let { data, error } = await applyFilters(
-    supabase
+  const buildQuery = (orderCol: string) => {
+    let query = supabase
       .from(TABLE_NAME)
       .select('*')
-      .order('updated_at', { ascending: true })
-      .order('id', { ascending: true })
-  );
+      .order(orderCol, { ascending: true })
+      .order('id', { ascending: true });
 
-  if (error?.code === '42703') {
-    ({ data, error } = await applyFilters(
-      supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .order('uploaded_at', { ascending: true })
-        .order('id', { ascending: true })
-    ));
+    if (filters?.channels && filters.channels.length > 0) {
+      query = query.in('channel', filters.channels);
+    }
+    if (filters?.thread_ids && filters.thread_ids.length > 0) {
+      query = query.in('thread_id', filters.thread_ids);
+    }
+    if (filters?.message_to && filters.message_to.length > 0) {
+      query = query.in('message_to', filters.message_to);
+    }
+
+    return query;
+  };
+
+  let data: any[] | null = null;
+  let error: any = null;
+
+  try {
+    data = await fetchAllRows(buildQuery('updated_at'));
+  } catch (e: any) {
+    if (e?.code === '42703') {
+      try {
+        data = await fetchAllRows(buildQuery('uploaded_at'));
+      } catch (e2: any) {
+        error = e2;
+      }
+    } else {
+      error = e;
+    }
   }
 
   if (error) {
