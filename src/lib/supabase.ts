@@ -45,41 +45,29 @@ export async function fetchConversations(filters?: {
   thread_ids?: string[];
   message_to?: string[];
 }): Promise<Conversation[]> {
-  const buildQuery = (orderCol: string) => {
-    let query = supabase
-      .from(TABLE_NAME)
-      .select('*')
-      .order(orderCol, { ascending: true })
-      .order('id', { ascending: true });
+  let query = supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .order('uploaded_at', { ascending: true })
+    .order('id', { ascending: true });
 
-    if (filters?.channels && filters.channels.length > 0) {
-      query = query.in('channel', filters.channels);
-    }
-    if (filters?.thread_ids && filters.thread_ids.length > 0) {
-      query = query.in('thread_id', filters.thread_ids);
-    }
-    if (filters?.message_to && filters.message_to.length > 0) {
-      query = query.in('message_to', filters.message_to);
-    }
-
-    return query;
-  };
+  if (filters?.channels && filters.channels.length > 0) {
+    query = query.in('channel', filters.channels);
+  }
+  if (filters?.thread_ids && filters.thread_ids.length > 0) {
+    query = query.in('thread_id', filters.thread_ids);
+  }
+  if (filters?.message_to && filters.message_to.length > 0) {
+    query = query.in('message_to', filters.message_to);
+  }
 
   let data: any[] | null = null;
   let error: any = null;
 
   try {
-    data = await fetchAllRows(buildQuery('updated_at'));
+    data = await fetchAllRows(query);
   } catch (e: any) {
-    if (e?.code === '42703') {
-      try {
-        data = await fetchAllRows(buildQuery('uploaded_at'));
-      } catch (e2: any) {
-        error = e2;
-      }
-    } else {
-      error = e;
-    }
+    error = e;
   }
 
   if (error) {
