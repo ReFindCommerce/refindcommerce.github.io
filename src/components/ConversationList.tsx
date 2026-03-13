@@ -105,10 +105,10 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      conv.sender_name.toLowerCase().includes(query) ||
-      conv.thread_id.toLowerCase().includes(query) ||
-      conv.message_from.toLowerCase().includes(query) ||
-      conv.channel.toLowerCase().includes(query)
+      (conv.sender_name || '').toLowerCase().includes(query) ||
+      (conv.thread_id || '').toLowerCase().includes(query) ||
+      (conv.message_from || '').toLowerCase().includes(query) ||
+      (conv.channel || '').toLowerCase().includes(query)
     );
   });
 
