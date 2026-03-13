@@ -45,41 +45,29 @@ export async function fetchConversations(filters?: {
   thread_ids?: string[];
   message_to?: string[];
 }): Promise<Conversation[]> {
-  const buildQuery = (orderCol: string) => {
-    let query = supabase
-      .from(TABLE_NAME)
-      .select('*')
-      .order(orderCol, { ascending: true })
-      .order('id', { ascending: true });
+  let query = supabase
+    .from(TABLE_NAME)
+    .select('*')
+    .order('uploaded_at', { ascending: true })
+    .order('id', { ascending: true });
 
-    if (filters?.channels && filters.channels.length > 0) {
-      query = query.in('channel', filters.channels);
-    }
-    if (filters?.thread_ids && filters.thread_ids.length > 0) {
-      query = query.in('thread_id', filters.thread_ids);
-    }
-    if (filters?.message_to && filters.message_to.length > 0) {
-      query = query.in('message_to', filters.message_to);
-    }
-
-    return query;
-  };
+  if (filters?.channels && filters.channels.length > 0) {
+    query = query.in('channel', filters.channels);
+  }
+  if (filters?.thread_ids && filters.thread_ids.length > 0) {
+    query = query.in('thread_id', filters.thread_ids);
+  }
+  if (filters?.message_to && filters.message_to.length > 0) {
+    query = query.in('message_to', filters.message_to);
+  }
 
   let data: any[] | null = null;
   let error: any = null;
 
   try {
-    data = await fetchAllRows(buildQuery('updated_at'));
+    data = await fetchAllRows(query);
   } catch (e: any) {
-    if (e?.code === '42703') {
-      try {
-        data = await fetchAllRows(buildQuery('uploaded_at'));
-      } catch (e2: any) {
-        error = e2;
-      }
-    } else {
-      error = e;
-    }
+    error = e;
   }
 
   if (error) {
@@ -102,18 +90,17 @@ export async function fetchConversations(filters?: {
         message_to: msg.message_to,
         status: msg.direction === 'outbound' ? 'answered' : 'new',
         last_message: msg.user_message || msg.final_reply || '',
-        last_message_time: msg.updated_at || msg.uploaded_at,
+        last_message_time: msg.uploaded_at,
         unread_count: msg.status === 'new' ? 1 : 0,
       });
     } else {
-      // Update with latest message info - always use the most recent message's status
-      const messageTimestamp = msg.updated_at || msg.uploaded_at;
-      const msgTime = new Date(messageTimestamp).getTime();
+      // Update with latest message info
+      const msgTime = new Date(msg.uploaded_at).getTime();
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
-        existing.last_message = msg.user_message || msg.final_reply || '';
-        existing.last_message_time = messageTimestamp;
+      existing.last_message = msg.user_message || msg.final_reply || '';
+        existing.last_message_time = msg.uploaded_at;
         existing.status = msg.direction === 'outbound' ? 'answered' : 'new';
       }
       
