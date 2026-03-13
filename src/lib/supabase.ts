@@ -90,13 +90,12 @@ export async function fetchConversations(filters?: {
         message_to: msg.message_to,
         status: msg.direction === 'outbound' ? 'answered' : 'new',
         last_message: msg.user_message || msg.final_reply || '',
-        last_message_time: msg.updated_at || msg.uploaded_at,
+        last_message_time: msg.uploaded_at,
         unread_count: msg.status === 'new' ? 1 : 0,
       });
     } else {
-      // Update with latest message info - always use the most recent message's status
-      const messageTimestamp = msg.updated_at || msg.uploaded_at;
-      const msgTime = new Date(messageTimestamp).getTime();
+      // Update with latest message info
+      const msgTime = new Date(msg.uploaded_at).getTime();
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
