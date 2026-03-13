@@ -100,8 +100,8 @@ export async function fetchConversations(filters?: {
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
-        existing.last_message = msg.user_message || msg.final_reply || '';
-        existing.last_message_time = messageTimestamp;
+      existing.last_message = msg.user_message || msg.final_reply || '';
+        existing.last_message_time = msg.uploaded_at;
         existing.status = msg.direction === 'outbound' ? 'answered' : 'new';
       }
       
