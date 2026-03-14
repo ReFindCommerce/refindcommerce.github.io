@@ -34,6 +34,16 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   }, [conversation?.thread_id]);
 
+  // Auto-refresh messages every 5 seconds
+  useEffect(() => {
+    if (!conversation) return;
+    const interval = setInterval(async () => {
+      const data = await fetchMessages(conversation.thread_id);
+      setMessages(data);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [conversation?.thread_id]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -266,10 +276,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
+      <div className="p-3 md:p-4 border-t border-border bg-card shrink-0">
         {/* Image Preview */}
         {imagePreview && (
-          <div className="relative inline-block mb-3 shrink-0">
+          <div className="relative inline-block mb-3">
             <img
               src={imagePreview}
               alt="Selected"
@@ -289,7 +299,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </div>
         )}
         
-        <div className="flex items-end gap-2 min-h-0">
+        <div className="flex items-end gap-2">
           <input
             type="file"
             ref={fileInputRef}
@@ -303,29 +313,28 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={sending}
-            className="shrink-0 mb-0.5"
+            className="shrink-0 h-10 w-10"
           >
             <ImagePlus className="w-5 h-5" />
           </Button>
           
-          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
-            <Textarea
-              value={replyText}
-              onChange={(e) => {
-                setReplyText(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.35) + 'px';
-              }}
-              placeholder="Type your reply..."
-              className="min-h-[44px] max-h-[35vh] resize-none overflow-auto w-full"
-              rows={1}
-            />
-          </div>
+          <Textarea
+            value={replyText}
+            onChange={(e) => {
+              setReplyText(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.3) + 'px';
+            }}
+            placeholder="Type your reply..."
+            className="flex-1 min-h-[44px] max-h-[30vh] resize-none overflow-auto"
+            rows={1}
+          />
           
           <Button
             onClick={handleSend}
             disabled={sending || (!replyText.trim() && !selectedImage)}
-            className="shrink-0 mb-0.5"
+            className="shrink-0 h-10 w-10"
+            size="icon"
           >
             {sending ? (
               <Loader2 className="w-5 h-5 animate-spin" />
