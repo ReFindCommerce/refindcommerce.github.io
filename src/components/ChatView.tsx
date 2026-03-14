@@ -45,6 +45,15 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     return () => clearInterval(interval);
   }, [conversation?.thread_id]);
 
+  // Auto-resize textarea when replyText changes
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.5) + 'px';
+    }
+  }, [replyText]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
