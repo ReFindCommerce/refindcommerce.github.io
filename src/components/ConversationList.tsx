@@ -18,6 +18,7 @@ interface ConversationListProps {
 export function ConversationList({ selectedThreadId, onSelectConversation }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [hideMode, setHideMode] = useState(false);
