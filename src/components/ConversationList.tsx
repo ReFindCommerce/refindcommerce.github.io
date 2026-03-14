@@ -173,7 +173,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search conversations..."
+            placeholder="Search by thread ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 bg-background"
