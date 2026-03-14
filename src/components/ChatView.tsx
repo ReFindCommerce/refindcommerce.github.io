@@ -26,6 +26,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -43,6 +44,15 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }, 5000);
     return () => clearInterval(interval);
   }, [conversation?.thread_id]);
+
+  // Auto-resize textarea when replyText changes
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.5) + 'px';
+    }
+  }, [replyText]);
 
   useEffect(() => {
     scrollToBottom();
@@ -276,7 +286,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-3 md:p-4 border-t border-border bg-card shrink-0">
+      <div className="p-3 md:p-4 border-t border-border bg-card">
         {/* Image Preview */}
         {imagePreview && (
           <div className="relative inline-block mb-3">
@@ -319,14 +329,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </Button>
           
           <Textarea
+            ref={textareaRef}
             value={replyText}
             onChange={(e) => {
               setReplyText(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.3) + 'px';
             }}
             placeholder="Type your reply..."
-            className="flex-1 min-h-[44px] max-h-[30vh] resize-none overflow-auto"
+            className="flex-1 min-h-[44px] max-h-[50vh] resize-none overflow-auto"
             rows={1}
           />
           
