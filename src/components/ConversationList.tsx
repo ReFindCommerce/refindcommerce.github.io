@@ -138,11 +138,16 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => loadConversations(true)}
+                onClick={async () => {
+                  setRefreshing(true);
+                  await loadConversations(false);
+                  setRefreshing(false);
+                }}
+                disabled={refreshing}
                 className="h-8 w-8"
                 title="Refresh"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
               </Button>
               <Button
                 variant={hasActiveFilters ? "default" : "ghost"}
