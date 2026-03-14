@@ -102,15 +102,14 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     ? conversations 
     : conversations.filter(conv => !isHidden(conv.thread_id));
 
-  const filteredConversations = visibleConversations.filter(conv => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      (conv.sender_name || '').toLowerCase().includes(query) ||
-      (conv.thread_id || '').toLowerCase().includes(query) ||
-      (conv.message_from || '').toLowerCase().includes(query) ||
-      (conv.channel || '').toLowerCase().includes(query)
-    );
+  const normalizeSearchValue = (value: unknown) => String(value ?? '').toLowerCase();
+
+  const filteredConversations = visibleConversations.filter((conv) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    // Search by thread_id (safe for any runtime data type)
+    return normalizeSearchValue(conv.thread_id).includes(query);
   });
 
   const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
