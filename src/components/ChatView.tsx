@@ -34,6 +34,16 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   }, [conversation?.thread_id]);
 
+  // Auto-refresh messages every 5 seconds
+  useEffect(() => {
+    if (!conversation) return;
+    const interval = setInterval(async () => {
+      const data = await fetchMessages(conversation.thread_id);
+      setMessages(data);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [conversation?.thread_id]);
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
