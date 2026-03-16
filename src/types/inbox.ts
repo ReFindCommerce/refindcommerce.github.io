@@ -26,7 +26,6 @@ export interface Message {
   item_id_ebay: string | null;
   subject_ebay_message: string | null;
 }
-}
 
 export interface Conversation {
   thread_id: string;
