@@ -1,25 +1,30 @@
 
 
-## Plan: Show eBay subject under customer messages
+## Диагностика: статус NEW/ANSWERED не обновляется
 
-Two small changes:
+### Проблема
+Сортировка и отображение статусов `new`/`answered` перестали корректно работать.
 
-### 1. `src/types/inbox.ts`
-Add to `Message` interface:
+### Корневая причина
+В функции `fetchConversations` (файл `src/lib/supabase.ts`) статус определяется по последнему сообщению через сравнение `msgTime > existingTime`. Если несколько сообщений имеют **одинаковый timestamp** (что видно в данных - все сообщения имеют `2026-03-05T06:18:48.285799`), то сравнение `>` не срабатывает и статус остаётся от первого встреченного сообщения, а не от реально последнего.
+
+### Решение
+
+**Файл: `src/lib/supabase.ts`** - строка ~67
+
+Изменить условие с `>` на `>=`:
+
 ```typescript
-subject_ebay_message: string | null;
+if (msgTime >= existingTime) {
 ```
 
-### 2. `src/components/MessageBubble.tsx`
-After the message content `<div>` (around line 65), add for inbound eBay messages with non-empty subject:
+Это гарантирует, что при одинаковых timestamps статус будет обновлён последним обработанным сообщением (которое идёт позже в массиве, т.к. данные отсортированы по `uploaded_at desc` - значит нужно использовать `ascending: true` или инвертировать логику).
 
-```tsx
-{message.channel === 'ebay' && !isOutbound && message.subject_ebay_message && (
-  <p className="text-xs text-muted-foreground mt-1 px-1">
-    📦 {message.subject_ebay_message}
-  </p>
-)}
+Дополнительно: изменить сортировку запроса на `ascending: true`, чтобы последнее сообщение обрабатывалось последним и корректно перезаписывало статус:
+
+```typescript
+.order('uploaded_at', { ascending: true });
 ```
 
-No query changes needed — `select('*')` already picks up the new column. Empty/null values are handled by the `&&` check.
+Это двухстрочное изменение в одном файле.
 
