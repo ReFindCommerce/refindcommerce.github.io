@@ -86,6 +86,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
     
     setLoading(false);
+
+    // Always scroll to bottom on initial load
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      isNearBottom.current = true;
+      setTimeout(() => scrollToBottom(), 50);
+    }
   };
 
   const scrollToBottom = () => {
