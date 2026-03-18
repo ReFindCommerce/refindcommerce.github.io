@@ -27,10 +27,15 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const isNearBottom = useRef(true);
+  const isInitialLoad = useRef(true);
   const { toast } = useToast();
 
   useEffect(() => {
     if (conversation) {
+      isInitialLoad.current = true;
+      isNearBottom.current = true;
       loadMessages();
     }
   }, [conversation?.thread_id]);
@@ -55,8 +60,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   }, [replyText]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (isNearBottom.current) {
+      scrollToBottom();
+    }
   }, [messages]);
+
+  const handleScroll = () => {
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    isNearBottom.current = scrollHeight - scrollTop - clientHeight < 100;
+  };
 
   const loadMessages = async () => {
     if (!conversation) return;
@@ -74,6 +88,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
     
     setLoading(false);
+
+    // Always scroll to bottom on initial load
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      isNearBottom.current = true;
+      setTimeout(() => scrollToBottom(), 50);
+    }
   };
 
   const scrollToBottom = () => {
@@ -266,7 +287,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-3 md:p-4">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-3 md:p-4" onScrollCapture={handleScroll}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
