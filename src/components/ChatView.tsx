@@ -34,6 +34,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
   useEffect(() => {
     if (conversation) {
+      isInitialLoad.current = true;
+      isNearBottom.current = true;
       loadMessages();
     }
   }, [conversation?.thread_id]);
