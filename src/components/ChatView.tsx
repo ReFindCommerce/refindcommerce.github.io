@@ -287,7 +287,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-3 md:p-4">
+      <ScrollArea ref={scrollAreaRef} className="flex-1 p-3 md:p-4" onScrollCapture={handleScroll}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
