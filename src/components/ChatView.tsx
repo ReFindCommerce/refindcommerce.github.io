@@ -58,8 +58,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   }, [replyText]);
 
   useEffect(() => {
-    scrollToBottom();
+    if (isNearBottom.current) {
+      scrollToBottom();
+    }
   }, [messages]);
+
+  const handleScroll = () => {
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!viewport) return;
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    isNearBottom.current = scrollHeight - scrollTop - clientHeight < 100;
+  };
 
   const loadMessages = async () => {
     if (!conversation) return;
