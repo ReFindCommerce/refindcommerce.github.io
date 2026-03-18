@@ -1,30 +1,15 @@
 
 
-## Диагностика: статус NEW/ANSWERED не обновляется
+## Fix: Prevent auto-scroll when reading older messages
 
-### Проблема
-Сортировка и отображение статусов `new`/`answered` перестали корректно работать.
+**Problem:** Every 5-second refresh calls `scrollToBottom()` via the `useEffect` on `[messages]`, forcing the user down even when reading older messages.
 
-### Корневая причина
-В функции `fetchConversations` (файл `src/lib/supabase.ts`) статус определяется по последнему сообщению через сравнение `msgTime > existingTime`. Если несколько сообщений имеют **одинаковый timestamp** (что видно в данных - все сообщения имеют `2026-03-05T06:18:48.285799`), то сравнение `>` не срабатывает и статус остаётся от первого встреченного сообщения, а не от реально последнего.
+**Solution in `src/components/ChatView.tsx`:**
 
-### Решение
+1. Add a `isNearBottom` ref that tracks whether the user is scrolled near the bottom of the chat.
+2. Attach an `onScroll` handler to the `ScrollArea` viewport to update this ref — consider "near bottom" if within ~100px of the bottom.
+3. Change `scrollToBottom` in the `useEffect([messages])` to only scroll if `isNearBottom` is true.
+4. On initial load (`loadMessages`), always scroll to bottom.
 
-**Файл: `src/lib/supabase.ts`** - строка ~67
-
-Изменить условие с `>` на `>=`:
-
-```typescript
-if (msgTime >= existingTime) {
-```
-
-Это гарантирует, что при одинаковых timestamps статус будет обновлён последним обработанным сообщением (которое идёт позже в массиве, т.к. данные отсортированы по `uploaded_at desc` - значит нужно использовать `ascending: true` или инвертировать логику).
-
-Дополнительно: изменить сортировку запроса на `ascending: true`, чтобы последнее сообщение обрабатывалось последним и корректно перезаписывало статус:
-
-```typescript
-.order('uploaded_at', { ascending: true });
-```
-
-Это двухстрочное изменение в одном файле.
+This way, the 5-second auto-refresh updates messages without jumping the scroll position, unless the user is already at the bottom.
 
