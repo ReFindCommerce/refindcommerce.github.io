@@ -27,6 +27,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const isNearBottom = useRef(true);
+  const isInitialLoad = useRef(true);
   const { toast } = useToast();
 
   useEffect(() => {
