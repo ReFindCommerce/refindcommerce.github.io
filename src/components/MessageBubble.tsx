@@ -61,14 +61,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             )}
           >
             <p className="text-sm whitespace-pre-wrap break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{content}</p>
-        </div>
-        )}
-
-        {message.channel === 'ebay' && !isOutbound && message.subject_ebay_message && (
-          <div className="mt-1 px-3 py-1.5 rounded-lg bg-accent/50 border border-border/50">
-            <p className="text-xs text-muted-foreground italic">
-              📦 <span className="font-medium">{message.subject_ebay_message}</span>
-            </p>
           </div>
         )}
         

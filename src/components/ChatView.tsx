@@ -26,51 +26,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const isNearBottom = useRef(true);
-  const isInitialLoad = useRef(true);
   const { toast } = useToast();
 
   useEffect(() => {
     if (conversation) {
-      isInitialLoad.current = true;
-      isNearBottom.current = true;
       loadMessages();
     }
   }, [conversation?.thread_id]);
 
-  // Auto-refresh messages every 5 seconds
   useEffect(() => {
-    if (!conversation) return;
-    const interval = setInterval(async () => {
-      const data = await fetchMessages(conversation.thread_id);
-      setMessages(data);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [conversation?.thread_id]);
-
-  // Auto-resize textarea when replyText changes
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (ta) {
-      ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.5) + 'px';
-    }
-  }, [replyText]);
-
-  useEffect(() => {
-    if (isNearBottom.current) {
-      scrollToBottom();
-    }
+    scrollToBottom();
   }, [messages]);
-
-  const handleScroll = () => {
-    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
-    if (!viewport) return;
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    isNearBottom.current = scrollHeight - scrollTop - clientHeight < 100;
-  };
 
   const loadMessages = async () => {
     if (!conversation) return;
@@ -88,13 +54,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
     
     setLoading(false);
-
-    // Always scroll to bottom on initial load
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false;
-      isNearBottom.current = true;
-      setTimeout(() => scrollToBottom(), 50);
-    }
   };
 
   const scrollToBottom = () => {
@@ -167,7 +126,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
       // Prepare the payload
-      const payload: Record<string, string | string[] | null | undefined> = {
+      const payload: Record<string, string | null | undefined> = {
         id: latestMessage?.id || crypto.randomUUID(),
         channel: conversation.channel,
         thread_id: conversation.thread_id,
@@ -186,15 +145,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         payload.agent_image_url = agentImageUrl;
       }
 
-      // eBay-specific fields
+      // Find eBay IDs across all messages (reverse to get most recent non-null value)
       if (channel === 'ebay') {
-        const ebayMessageIds = messages
-          .filter(m => m.message_id_ebay)
-          .map(m => m.message_id_ebay);
+        const ebayMessageId = [...messages].reverse().find(m => m.message_id_ebay)?.message_id_ebay;
         const ebayItemId = [...messages].reverse().find(m => m.item_id_ebay)?.item_id_ebay;
 
-        if (ebayMessageIds.length > 0) {
-          payload.message_id_ebay = ebayMessageIds;
+        if (ebayMessageId) {
+          payload.message_id_ebay = ebayMessageId;
         }
         if (ebayItemId) {
           payload.item_id_ebay = ebayItemId;
@@ -289,7 +246,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-3 md:p-4" onScrollCapture={handleScroll}>
+      <ScrollArea className="flex-1 p-3 md:p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
@@ -309,10 +266,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-3 md:p-4 border-t border-border bg-card">
+      <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
         {/* Image Preview */}
         {imagePreview && (
-          <div className="relative inline-block mb-3">
+          <div className="relative inline-block mb-3 shrink-0">
             <img
               src={imagePreview}
               alt="Selected"
@@ -332,7 +289,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </div>
         )}
         
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 min-h-0">
           <input
             type="file"
             ref={fileInputRef}
@@ -346,27 +303,29 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={sending}
-            className="shrink-0 h-10 w-10"
+            className="shrink-0 mb-0.5"
           >
             <ImagePlus className="w-5 h-5" />
           </Button>
           
-          <Textarea
-            ref={textareaRef}
-            value={replyText}
-            onChange={(e) => {
-              setReplyText(e.target.value);
-            }}
-            placeholder="Type your reply..."
-            className="flex-1 min-h-[44px] max-h-[50vh] resize-none overflow-auto"
-            rows={1}
-          />
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            <Textarea
+              value={replyText}
+              onChange={(e) => {
+                setReplyText(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.35) + 'px';
+              }}
+              placeholder="Type your reply..."
+              className="min-h-[44px] max-h-[35vh] resize-none overflow-auto w-full"
+              rows={1}
+            />
+          </div>
           
           <Button
             onClick={handleSend}
             disabled={sending || (!replyText.trim() && !selectedImage)}
-            className="shrink-0 h-10 w-10"
-            size="icon"
+            className="shrink-0 mb-0.5"
           >
             {sending ? (
               <Loader2 className="w-5 h-5 animate-spin" />

@@ -18,7 +18,6 @@ interface ConversationListProps {
 export function ConversationList({ selectedThreadId, onSelectConversation }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [hideMode, setHideMode] = useState(false);
@@ -102,14 +101,15 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     ? conversations 
     : conversations.filter(conv => !isHidden(conv.thread_id));
 
-  const normalizeSearchValue = (value: unknown) => String(value ?? '').toLowerCase();
-
-  const filteredConversations = visibleConversations.filter((conv) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-
-    // Search by thread_id (safe for any runtime data type)
-    return normalizeSearchValue(conv.thread_id).includes(query);
+  const filteredConversations = visibleConversations.filter(conv => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      conv.sender_name.toLowerCase().includes(query) ||
+      conv.thread_id.toLowerCase().includes(query) ||
+      conv.message_from.toLowerCase().includes(query) ||
+      conv.channel.toLowerCase().includes(query)
+    );
   });
 
   const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
@@ -138,16 +138,11 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={async () => {
-                  setRefreshing(true);
-                  await loadConversations(false);
-                  setRefreshing(false);
-                }}
-                disabled={refreshing}
+                onClick={() => loadConversations(true)}
                 className="h-8 w-8"
                 title="Refresh"
               >
-                <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+                <RefreshCw className="w-4 h-4" />
               </Button>
               <Button
                 variant={hasActiveFilters ? "default" : "ghost"}
@@ -173,7 +168,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search by thread ID..."
+            placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 bg-background"
