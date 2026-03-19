@@ -167,7 +167,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
       // Prepare the payload
-      const payload: Record<string, string | null | undefined> = {
+      const payload: Record<string, string | string[] | null | undefined> = {
         id: latestMessage?.id || crypto.randomUUID(),
         channel: conversation.channel,
         thread_id: conversation.thread_id,
@@ -186,16 +186,20 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         payload.agent_image_url = agentImageUrl;
       }
 
-      // Find eBay IDs across all messages (reverse to get most recent non-null value)
+      // Collect all eBay IDs as arrays
       if (channel === 'ebay') {
-        const ebayMessageId = [...messages].reverse().find(m => m.message_id_ebay)?.message_id_ebay;
-        const ebayItemId = [...messages].reverse().find(m => m.item_id_ebay)?.item_id_ebay;
+        const ebayMessageIds = messages
+          .filter(m => m.message_id_ebay)
+          .map(m => m.message_id_ebay);
+        const ebayItemIds = messages
+          .filter(m => m.item_id_ebay)
+          .map(m => m.item_id_ebay);
 
-        if (ebayMessageId) {
-          payload.message_id_ebay = ebayMessageId;
+        if (ebayMessageIds.length > 0) {
+          payload.message_id_ebay = ebayMessageIds;
         }
-        if (ebayItemId) {
-          payload.item_id_ebay = ebayItemId;
+        if (ebayItemIds.length > 0) {
+          payload.item_id_ebay = ebayItemIds;
         }
       }
 
