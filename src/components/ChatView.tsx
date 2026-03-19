@@ -186,20 +186,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         payload.agent_image_url = agentImageUrl;
       }
 
-      // Collect all eBay IDs as arrays
+      // eBay-specific fields
       if (channel === 'ebay') {
         const ebayMessageIds = messages
           .filter(m => m.message_id_ebay)
           .map(m => m.message_id_ebay);
-        const ebayItemIds = messages
-          .filter(m => m.item_id_ebay)
-          .map(m => m.item_id_ebay);
+        const ebayItemId = [...messages].reverse().find(m => m.item_id_ebay)?.item_id_ebay;
 
         if (ebayMessageIds.length > 0) {
           payload.message_id_ebay = ebayMessageIds;
         }
-        if (ebayItemIds.length > 0) {
-          payload.item_id_ebay = ebayItemIds;
+        if (ebayItemId) {
+          payload.item_id_ebay = ebayItemId;
         }
       }
 
