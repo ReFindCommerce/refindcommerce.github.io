@@ -1,30 +1,28 @@
 
 
-## Диагностика: статус NEW/ANSWERED не обновляется
+## Send eBay IDs as arrays in webhook payload
 
-### Проблема
-Сортировка и отображение статусов `new`/`answered` перестали корректно работать.
+**Change in `src/components/ChatView.tsx`** (~lines 155-162):
 
-### Корневая причина
-В функции `fetchConversations` (файл `src/lib/supabase.ts`) статус определяется по последнему сообщению через сравнение `msgTime > existingTime`. Если несколько сообщений имеют **одинаковый timestamp** (что видно в данных - все сообщения имеют `2026-03-05T06:18:48.285799`), то сравнение `>` не срабатывает и статус остаётся от первого встреченного сообщения, а не от реально последнего.
-
-### Решение
-
-**Файл: `src/lib/supabase.ts`** - строка ~67
-
-Изменить условие с `>` на `>=`:
+Replace the current logic that finds a single `message_id_ebay` and `item_id_ebay` with collecting all non-null values into arrays:
 
 ```typescript
-if (msgTime >= existingTime) {
+if (channel === 'ebay') {
+  const ebayMessageIds = messages
+    .filter(m => m.message_id_ebay)
+    .map(m => m.message_id_ebay);
+  const ebayItemIds = messages
+    .filter(m => m.item_id_ebay)
+    .map(m => m.item_id_ebay);
+
+  if (ebayMessageIds.length > 0) {
+    payload.message_id_ebay = ebayMessageIds;
+  }
+  if (ebayItemIds.length > 0) {
+    payload.item_id_ebay = ebayItemIds;
+  }
+}
 ```
 
-Это гарантирует, что при одинаковых timestamps статус будет обновлён последним обработанным сообщением (которое идёт позже в массиве, т.к. данные отсортированы по `uploaded_at desc` - значит нужно использовать `ascending: true` или инвертировать логику).
-
-Дополнительно: изменить сортировку запроса на `ascending: true`, чтобы последнее сообщение обрабатывалось последним и корректно перезаписывало статус:
-
-```typescript
-.order('uploaded_at', { ascending: true });
-```
-
-Это двухстрочное изменение в одном файле.
+One file, one change. The webhook will now receive arrays of all eBay IDs from the thread instead of a single value.
 
