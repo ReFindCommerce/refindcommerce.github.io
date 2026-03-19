@@ -167,7 +167,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
       // Prepare the payload
-      const payload: Record<string, string | null | undefined> = {
+      const payload: Record<string, string | string[] | null | undefined> = {
         id: latestMessage?.id || crypto.randomUUID(),
         channel: conversation.channel,
         thread_id: conversation.thread_id,
