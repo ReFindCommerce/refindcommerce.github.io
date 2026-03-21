@@ -145,16 +145,24 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         payload.agent_image_url = agentImageUrl;
       }
 
-      // Find eBay IDs across all messages (reverse to get most recent non-null value)
+      // Find eBay IDs from the last inbound message only
       if (channel === 'ebay') {
-        const ebayMessageId = [...messages].reverse().find(m => m.message_id_ebay)?.message_id_ebay;
-        const ebayItemId = [...messages].reverse().find(m => m.item_id_ebay)?.item_id_ebay;
-
-        if (ebayMessageId) {
-          payload.message_id_ebay = ebayMessageId;
+        const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
+        
+        if (lastInbound?.message_id_ebay) {
+          // Extract plain string ID, ignoring any nested arrays from previous sends
+          const raw = lastInbound.message_id_ebay;
+          const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
+          if (cleanId) {
+            payload.message_id_ebay = cleanId;
+          }
         }
-        if (ebayItemId) {
-          payload.item_id_ebay = ebayItemId;
+        if (lastInbound?.item_id_ebay) {
+          const raw = lastInbound.item_id_ebay;
+          const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
+          if (cleanId) {
+            payload.item_id_ebay = cleanId;
+          }
         }
       }
 
