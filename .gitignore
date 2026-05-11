@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+.n8n-*
+.phone-subscription*.json
+.send-push-test.cjs
 
 # Editor directories and files
 .vscode/*
