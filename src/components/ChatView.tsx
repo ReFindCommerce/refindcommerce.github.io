@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
-import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
+import { fetchMessages, fetchSavedReplySuggestions, getLatestAiReply, type SavedReplySuggestion } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
 import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink } from 'lucide-react';
@@ -28,6 +28,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [savedReplies, setSavedReplies] = useState<SavedReplySuggestion[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -69,6 +70,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     try {
       const data = await fetchMessages(conversation.thread_id);
       setMessages(data);
+      const lastInbound = [...data].reverse().find((message) => message.direction === 'inbound');
+      const suggestions = await fetchSavedReplySuggestions({
+        message: lastInbound?.user_message,
+        channel: conversation.channel,
+        message_to: lastInbound?.message_to || conversation.message_to,
+      });
+      setSavedReplies(suggestions);
       
       const savedDraft = loadDraft(conversation.thread_id);
 
@@ -79,6 +87,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         const aiReply = await getLatestAiReply(conversation.thread_id);
         if (aiReply) {
           setReplyText(aiReply);
+        } else if (suggestions[0]?.answer) {
+          setReplyText(suggestions[0].answer);
         } else {
           setReplyText('');
         }
@@ -241,6 +251,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       // Clear inputs
       clearDraft(conversation.thread_id);
       setReplyText('');
+      setSavedReplies([]);
       removeMedia();
       
       // Reload messages after a short delay
@@ -375,6 +386,22 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 Detected contact: {inferredContact.email || inferredContact.phone}
               </span>
             )}
+          </div>
+        )}
+        {savedReplies.length > 0 && (
+          <div className="mb-3 space-y-2 rounded-md border bg-background p-2 text-xs">
+            <div className="font-medium text-foreground">Saved replies</div>
+            {savedReplies.map((reply) => (
+              <button
+                key={`${reply.question}-${reply.message_to || ''}`}
+                type="button"
+                onClick={() => setReplyText(reply.answer)}
+                className="block w-full rounded-sm border px-2 py-1.5 text-left hover:bg-muted"
+              >
+                <span className="line-clamp-1 font-medium text-foreground">{reply.question}</span>
+                <span className="line-clamp-2 text-muted-foreground">{reply.answer}</span>
+              </button>
+            ))}
           </div>
         )}
         {/* Attachment Preview */}
