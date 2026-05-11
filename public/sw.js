@@ -1,8 +1,9 @@
-const CACHE_NAME = "refind-inbox-v8";
+const CACHE_NAME = "refind-inbox-v9";
 const APP_ASSETS = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
+  "/apple-touch-icon.png",
   "/app-icon.svg",
 ];
 
@@ -71,8 +72,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: "/app-icon.svg",
-      badge: "/app-icon.svg",
+      icon: "/apple-touch-icon.png",
+      badge: "/apple-touch-icon.png",
       tag: payload.tag || "refind-inbox-message",
       data: { url: payload.url || "/" },
     })
