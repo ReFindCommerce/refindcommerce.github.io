@@ -53,6 +53,64 @@ export async function getPushPermissionState(): Promise<NotificationPermission |
   return Notification.permission;
 }
 
+async function saveSubscriptionToBackend(subscription: PushSubscription): Promise<void> {
+  const response = await fetch(PUSH_SUBSCRIBE_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subscription,
+      userAgent: window.navigator.userAgent,
+      appUrl: window.location.origin,
+      enabledAt: new Date().toISOString(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Notifications are allowed on this device, but the notification backend is not connected yet.');
+  }
+}
+
+async function getOrCreateCurrentSubscription(): Promise<PushSubscription> {
+  const registration = await navigator.serviceWorker.ready;
+  const existingSubscription = await registration.pushManager.getSubscription();
+
+  if (existingSubscription && !subscriptionUsesCurrentKey(existingSubscription)) {
+    await existingSubscription.unsubscribe();
+  }
+
+  const currentSubscription = await registration.pushManager.getSubscription();
+  return (
+    currentSubscription ||
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    }))
+  );
+}
+
+export async function syncPushSubscription(): Promise<void> {
+  if (!supportsPushNotifications()) {
+    throw new Error('Push notifications are not supported in this browser.');
+  }
+
+  if (isIosBrowser() && !isStandaloneApp()) {
+    throw new Error('On iPhone, install the app from Safari first, then open the installed app to enable notifications.');
+  }
+
+  if (Notification.permission !== 'granted') {
+    throw new Error('Notifications are not allowed on this device yet.');
+  }
+
+  const subscription = await getOrCreateCurrentSubscription();
+
+  try {
+    await saveSubscriptionToBackend(subscription);
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Notifications are allowed on this device, but the notification backend is not connected yet.');
+  }
+}
+
 export async function enablePushNotifications(): Promise<void> {
   if (!supportsPushNotifications()) {
     throw new Error('Push notifications are not supported in this browser.');
@@ -67,36 +125,5 @@ export async function enablePushNotifications(): Promise<void> {
     throw new Error('Notifications were not allowed.');
   }
 
-  const registration = await navigator.serviceWorker.ready;
-  const existingSubscription = await registration.pushManager.getSubscription();
-  if (existingSubscription && !subscriptionUsesCurrentKey(existingSubscription)) {
-    await existingSubscription.unsubscribe();
-  }
-
-  const currentSubscription = await registration.pushManager.getSubscription();
-  const subscription =
-    currentSubscription ||
-    (await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    }));
-
-  try {
-    const response = await fetch(PUSH_SUBSCRIBE_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subscription,
-        userAgent: window.navigator.userAgent,
-        appUrl: window.location.origin,
-        enabledAt: new Date().toISOString(),
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error();
-    }
-  } catch {
-    throw new Error('Notifications are allowed on this device, but the notification backend is not connected yet.');
-  }
+  await syncPushSubscription();
 }
