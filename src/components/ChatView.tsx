@@ -3,7 +3,7 @@ import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
 import { fetchMessages, fetchSavedReplySuggestions, getLatestAiReply, type SavedReplySuggestion } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -128,6 +128,23 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     setMediaPreview(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: 'Copied',
+        description: `${label} copied to clipboard.`,
+      });
+    } catch (error) {
+      console.error('Copy failed:', error);
+      toast({
+        title: 'Copy failed',
+        description: 'Please select and copy the text manually.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -355,7 +372,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
       {/* Input Area */}
       <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
-        {(showTranslationTools || inferredContact.email || inferredContact.phone) && (
+        {(showTranslationTools || inferredContact.email || inferredContact.phone || (latestInboundText && replyText.trim())) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {showTranslationTools && latestInboundText && (
               <a
@@ -386,21 +403,58 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 Detected contact: {inferredContact.email || inferredContact.phone}
               </span>
             )}
+            {latestInboundText && replyText.trim() && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={() =>
+                  copyToClipboard(
+                    JSON.stringify(
+                      {
+                        question: latestInboundText,
+                        answer: replyText.trim(),
+                        channel: conversation.channel,
+                        message_to: conversation.message_to,
+                      },
+                      null,
+                      2,
+                    ),
+                    'saved reply draft',
+                  )
+                }
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy saved reply
+              </Button>
+            )}
           </div>
         )}
         {savedReplies.length > 0 && (
           <div className="mb-3 space-y-2 rounded-md border bg-background p-2 text-xs">
             <div className="font-medium text-foreground">Saved replies</div>
             {savedReplies.map((reply) => (
-              <button
-                key={`${reply.question}-${reply.message_to || ''}`}
-                type="button"
-                onClick={() => setReplyText(reply.answer)}
-                className="block w-full rounded-sm border px-2 py-1.5 text-left hover:bg-muted"
-              >
-                <span className="line-clamp-1 font-medium text-foreground">{reply.question}</span>
-                <span className="line-clamp-2 text-muted-foreground">{reply.answer}</span>
-              </button>
+              <div key={`${reply.question}-${reply.message_to || ''}`} className="flex gap-2 rounded-sm border p-2">
+                <button
+                  type="button"
+                  onClick={() => setReplyText(reply.answer)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="line-clamp-1 font-medium text-foreground">{reply.question}</span>
+                  <span className="line-clamp-2 text-muted-foreground">{reply.answer}</span>
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  title="Copy saved reply"
+                  onClick={() => copyToClipboard(reply.answer, 'saved reply')}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             ))}
           </div>
         )}
