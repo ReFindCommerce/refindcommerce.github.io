@@ -41,6 +41,27 @@ export async function checkForAppUpdate(): Promise<boolean> {
   return Boolean(pendingWorker || activeRegistration.waiting);
 }
 
+export async function refreshAppShell(): Promise<void> {
+  if ('caches' in window) {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+  }
+
+  if (activeRegistration) {
+    await activeRegistration.update();
+
+    if (activeRegistration.waiting) {
+      pendingWorker = activeRegistration.waiting;
+      applyPendingAppUpdate();
+      return;
+    }
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set('app-refresh', Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 export function onAppUpdateAvailable(callback: () => void): () => void {
   window.addEventListener(APP_UPDATE_EVENT, callback);
   return () => window.removeEventListener(APP_UPDATE_EVENT, callback);
