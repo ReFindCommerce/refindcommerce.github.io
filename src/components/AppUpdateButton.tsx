@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { applyPendingAppUpdate, checkForAppUpdate, hasPendingAppUpdate, onAppUpdateAvailable } from '@/lib/appUpdate';
+import {
+  applyPendingAppUpdate,
+  checkForAppUpdate,
+  hasPendingAppUpdate,
+  onAppUpdateAvailable,
+  refreshAppShell,
+} from '@/lib/appUpdate';
 import { useToast } from '@/hooks/use-toast';
 
 export function AppUpdateButton() {
@@ -29,17 +35,19 @@ export function AppUpdateButton() {
 
       if (!foundUpdate && !hasPendingAppUpdate()) {
         toast({
-          title: 'App is up to date',
-          description: 'No newer version is waiting on this device.',
+          title: 'Refreshing app',
+          description: 'Clearing the local app cache and loading the latest live version.',
         });
+        await refreshAppShell();
       }
     } catch (error) {
       console.error('Failed to check for app update:', error);
       toast({
-        title: 'Update check failed',
-        description: 'Reload the app and try again.',
+        title: 'Refreshing app',
+        description: 'The update check failed, so the app will reload from the live site.',
         variant: 'destructive',
       });
+      await refreshAppShell();
     } finally {
       setChecking(false);
     }
@@ -51,8 +59,8 @@ export function AppUpdateButton() {
       size="icon"
       onClick={updateAvailable ? updateNow : checkNow}
       className="h-8 w-8"
-      title={updateAvailable ? 'Update app now' : 'Check for app updates'}
-      aria-label={updateAvailable ? 'Update app now' : 'Check for app updates'}
+      title={updateAvailable ? 'Update app now' : 'Refresh app'}
+      aria-label={updateAvailable ? 'Update app now' : 'Refresh app'}
       disabled={checking}
     >
       <RotateCcw className={checking ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} />
