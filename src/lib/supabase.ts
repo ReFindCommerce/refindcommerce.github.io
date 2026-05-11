@@ -28,6 +28,9 @@ const MESSAGE_SELECT = [
   'image_url',
   'ebay_image',
   'message_id_ebay',
+  'gmail_message_id',
+  'gmail_thread_id',
+  'in_reply_to',
   'item_id_ebay',
   'subject_ebay_message',
 ].join(',');
