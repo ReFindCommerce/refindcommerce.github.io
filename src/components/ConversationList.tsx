@@ -7,7 +7,7 @@ import { NotificationButton } from './NotificationButton';
 import { AppUpdateButton } from './AppUpdateButton';
 import { fetchConversations } from '@/lib/supabase';
 import { useHiddenThreads } from '@/hooks/useHiddenThreads';
-import { Search, Filter, Inbox, RefreshCw, Check } from 'lucide-react';
+import { Search, Filter, Inbox, RefreshCw, Check, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -124,8 +124,6 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     }
   };
 
-  // In hide mode, show all conversations (including hidden) for selection
-  // In normal mode, filter out hidden conversations
   const visibleConversations = hideMode 
     ? conversations 
     : conversations.filter(conv => !isHidden(conv.thread_id));
@@ -154,10 +152,10 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   });
 
   const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
+  const hasSearch = Boolean(searchQuery.trim());
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
-      {/* Header */}
       <div className="p-3 md:p-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between mb-3 md:mb-4">
           <div className="flex items-center gap-2">
@@ -165,12 +163,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             <h1 className="text-lg md:text-xl font-bold text-foreground">Inbox</h1>
           </div>
           {hideMode ? (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={exitHideMode}
-              className="gap-1"
-            >
+            <Button variant="default" size="sm" onClick={exitHideMode} className="gap-1">
               <Check className="w-4 h-4" />
               Done
             </Button>
@@ -208,7 +201,6 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
           </div>
         )}
         
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -216,16 +208,34 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-background"
+            className="pl-10 pr-10 bg-background"
           />
+          {hasSearch && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
+
+        {(hasSearch || hasActiveFilters) && !loading && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Showing {filteredConversations.length} of {visibleConversations.length} conversations
+            {hasActiveFilters ? ' after filters' : ''}
+          </p>
+        )}
 
         {loadError && (
           <p className="mt-2 text-xs text-destructive">{loadError}</p>
         )}
       </div>
 
-      {/* Filter Panel */}
       {showFilters && !hideMode && (
         <FilterPanel
           filters={filters}
@@ -236,7 +246,6 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
         />
       )}
 
-      {/* Conversations */}
       <ScrollArea className="flex-1 [&>div>div]:!overflow-visible">
         {loading && conversations.length === 0 ? (
           <div className="flex items-center justify-center h-32">
@@ -245,7 +254,22 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
         ) : filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Inbox className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">No conversations found</p>
+            <p className="text-sm">
+              {hasSearch || hasActiveFilters ? 'No matching conversations' : 'No conversations found'}
+            </p>
+            {(hasSearch || hasActiveFilters) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilters({ channels: [], thread_ids: [], message_to: [] });
+                }}
+              >
+                Clear search and filters
+              </Button>
+            )}
           </div>
         ) : (
           <div className="py-2 pr-2">

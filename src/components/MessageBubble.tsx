@@ -2,29 +2,30 @@ import React, { useState } from 'react';
 import { Message } from '@/types/inbox';
 import { formatTime } from '@/lib/channelUtils';
 import { cn } from '@/lib/utils';
+import { cleanMessageText } from '@/lib/textFormat';
+import { buildTranslateUrl, extractLinks, extractMediaAttachments, hasNonEnglishSignals } from '@/lib/messageParsing';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
+import { ExternalLink, Languages, Paperclip, X } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: Message;
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
-  const [imageOpen, setImageOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<ReturnType<typeof extractMediaAttachments>[number] | null>(null);
   const isOutbound = message.direction === 'outbound';
   
   // Get content based on direction
-  const content = isOutbound ? message.final_reply : message.user_message;
-  
-  // Get image URL - check both fields regardless of direction
-  const imageUrl = message.customer_image_url || message.agent_image_url;
-  const isCustomerImage = !!message.customer_image_url;
+  const rawContent = isOutbound ? message.final_reply : message.user_message;
+  const content = cleanMessageText(rawContent);
+  const attachments = extractMediaAttachments(message);
+  const inlineLinks = extractLinks(rawContent).filter((link) => !attachments.some((attachment) => attachment.url === link));
+  const needsTranslation = !isOutbound && hasNonEnglishSignals(content);
 
-  // If no content and no image, don't render
-  if (!content && !imageUrl) return null;
+  if (!content && attachments.length === 0) return null;
 
-  // Determine alignment based on image ownership or message direction
-  const alignRight = imageUrl ? !isCustomerImage : isOutbound;
+  const alignRight = isOutbound;
 
   return (
     <>
@@ -34,20 +35,52 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           alignRight ? 'ml-auto items-end' : 'mr-auto items-start'
         )}
       >
-        {imageUrl && (
-          <div
-            className={cn(
-              'rounded-2xl overflow-hidden mb-1 shadow-sm p-1 cursor-pointer hover:opacity-90 transition-opacity',
-              alignRight ? 'bg-message-outbound' : 'bg-message-inbound'
-            )}
-            onClick={() => setImageOpen(true)}
-          >
-            <img
-              src={imageUrl}
-              alt="Message attachment"
-              className="max-w-full max-h-64 object-contain rounded-xl"
-              loading="lazy"
-            />
+        {attachments.length > 0 && (
+          <div className="grid gap-2 mb-1 max-w-full">
+            {attachments.map((attachment) => (
+              <div
+                key={attachment.url}
+                className={cn(
+                  'rounded-2xl overflow-hidden shadow-sm p-1 hover:opacity-90 transition-opacity',
+                  attachment.kind !== 'file' && 'cursor-pointer',
+                  alignRight ? 'bg-message-outbound' : 'bg-message-inbound'
+                )}
+                onClick={() => {
+                  if (attachment.kind === 'file') return;
+                  setSelectedAttachment(attachment);
+                  setMediaOpen(true);
+                }}
+              >
+                {attachment.kind === 'video' ? (
+                  <video
+                    src={attachment.url}
+                    className="max-w-full max-h-64 rounded-xl"
+                    controls
+                    preload="metadata"
+                  />
+                ) : attachment.kind === 'image' ? (
+                  <img
+                    src={attachment.url}
+                    alt="Message attachment"
+                    className="max-w-full max-h-64 object-contain rounded-xl"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <a
+                    href={attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 text-sm underline-offset-4 hover:underline"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Paperclip className="h-4 w-4 shrink-0" />
+                    Open attachment
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         )}
         
@@ -61,6 +94,33 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             )}
           >
             <p className="text-sm whitespace-pre-wrap break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{content}</p>
+            {inlineLinks.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1">
+                {inlineLinks.map((link) => (
+                  <a
+                    key={link}
+                    href={link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs underline underline-offset-4 opacity-90"
+                  >
+                    Open link
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ))}
+              </div>
+            )}
+            {needsTranslation && (
+              <a
+                href={buildTranslateUrl(content)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-4"
+              >
+                <Languages className="h-3 w-3" />
+                Translate message
+              </a>
+            )}
           </div>
         )}
         
@@ -69,20 +129,29 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </span>
       </div>
 
-      {/* Image Lightbox */}
-      <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+      <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
         <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 bg-transparent border-none shadow-none">
           <button
-            onClick={() => setImageOpen(false)}
+            onClick={() => setMediaOpen(false)}
             className="absolute top-2 right-2 z-10 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
-          <img
-            src={imageUrl || ''}
-            alt="Full size"
-            className="max-w-full max-h-[85vh] object-contain rounded-lg mx-auto"
-          />
+          {(selectedAttachment || attachments[0])?.kind === 'video' ? (
+            <video
+              src={(selectedAttachment || attachments[0])?.url || ''}
+              className="max-w-full max-h-[85vh] rounded-lg mx-auto"
+              controls
+              autoPlay
+            />
+          ) : (
+            <img
+              src={(selectedAttachment || attachments[0])?.url || ''}
+              alt="Full size"
+              className="max-w-full max-h-[85vh] object-contain rounded-lg mx-auto"
+              referrerPolicy="no-referrer"
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>

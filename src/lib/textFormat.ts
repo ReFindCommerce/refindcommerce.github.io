@@ -1,6 +1,9 @@
 const whitespacePattern = /\s+/g;
+const horizontalWhitespacePattern = /[ \t\f\v]+/g;
 const htmlEntityPattern = /&(?:[a-z]+|#\d+|#x[\da-f]+);/i;
 const htmlTagPattern = /<\/?[a-z][\s\S]*>/i;
+const quotedReplyPattern = /\n(?:On|Dne|Le|Am|El)\s.+(?:wrote|napsal|schrieb|escribi):[\s\S]*$/i;
+const commonFooterPattern = /\n(?:This e-mail is intended for|This email is intended for|Confidentiality notice|Sent from my iPhone)[\s\S]*$/i;
 
 function decodeEntities(value: string): string {
   if (!htmlEntityPattern.test(value)) return value;
@@ -45,10 +48,17 @@ export function cleanMessageText(value: string | null | undefined): string {
   if (!value) return '';
 
   return decodeEntities(stripHtml(value))
+    .replace(/\u00a0/g, ' ')
     .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(quotedReplyPattern, '')
+    .replace(commonFooterPattern, '')
     .replace(/[ \t]+\n/g, '\n')
+    .replace(horizontalWhitespacePattern, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .replace(whitespacePattern, ' ')
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
     .trim();
 }
 

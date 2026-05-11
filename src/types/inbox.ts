@@ -22,9 +22,11 @@ export interface Message {
   uploaded_at: string;
   customer_image_url: string | null;
   agent_image_url: string | null;
+  image_url: string | null;
+  ebay_image: string | null;
   message_id_ebay: string | null;
   item_id_ebay: string | null;
-  
+  subject_ebay_message?: string | null;
 }
 
 export interface Conversation {

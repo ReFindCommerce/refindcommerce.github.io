@@ -3,7 +3,7 @@ import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
 import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { clearDraft, loadDraft, saveDraft, setActiveDraftState } from '@/lib/draftState';
+import { buildTranslateUrl, extractContactInfo, hasNonEnglishSignals } from '@/lib/messageParsing';
+import { cleanMessageText } from '@/lib/textFormat';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -30,12 +32,44 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const loadMessages = async () => {
+    if (!conversation) return;
+    
+    setLoading(true);
+    try {
+      const data = await fetchMessages(conversation.thread_id);
+      setMessages(data);
+      
+      const savedDraft = loadDraft(conversation.thread_id);
+
+      if (savedDraft) {
+        setReplyText(savedDraft);
+      } else {
+        const aiReply = await getLatestAiReply(conversation.thread_id);
+        setReplyText(aiReply || '');
+      }
+
+      setDraftThreadId(conversation.thread_id);
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+      toast({
+        title: 'Could not load messages',
+        description: 'Please try refreshing this conversation.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (conversation) {
       setDraftThreadId(null);
       setSelectedMedia(null);
       setMediaPreview(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       loadMessages();
     } else {
       setActiveDraftState(false);
@@ -58,59 +92,46 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     return () => setActiveDraftState(false);
   }, []);
 
-  const loadMessages = async () => {
-    if (!conversation) return;
-
-    setLoading(true);
-    const data = await fetchMessages(conversation.thread_id);
-    setMessages(data);
-
-    const savedDraft = loadDraft(conversation.thread_id);
-    if (savedDraft) {
-      setReplyText(savedDraft);
-    } else {
-      const aiReply = await getLatestAiReply(conversation.thread_id);
-      setReplyText(aiReply || '');
-    }
-
-    setDraftThreadId(conversation.thread_id);
-    setLoading(false);
-  };
-
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSelectedMedia(file);
-    const reader = new FileReader();
-    reader.onload = (event) => setMediaPreview(event.target?.result as string);
-    reader.readAsDataURL(file);
+    if (file) {
+      setSelectedMedia(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setMediaPreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const removeMedia = () => {
     setSelectedMedia(null);
     setMediaPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSend = async () => {
     if (!conversation || (!replyText.trim() && !selectedMedia)) return;
 
     setSending(true);
-
+    
     try {
       let agentImageUrl: string | null = null;
 
       if (selectedMedia) {
         setUploadingImage(true);
-
+        
         try {
-          agentImageUrl = await new Promise<string>((resolve, reject) => {
+          const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result as string);
             reader.onerror = reject;
             reader.readAsDataURL(selectedMedia);
           });
+          
+          agentImageUrl = base64;
         } catch (error) {
           console.error('Error converting attachment:', error);
           toast({
@@ -122,11 +143,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           setUploadingImage(false);
           return;
         }
-
+        
         setUploadingImage(false);
       }
 
       const latestMessage = messages[messages.length - 1];
+      const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
+      const recentHistory = messages.slice(-12).map((message) => ({
+        direction: message.direction,
+        at: message.uploaded_at,
+        text: cleanMessageText(message.user_message || message.final_reply || message.ai_reply),
+      }));
+      const extractedContact = extractContactInfo(lastInbound?.user_message || '');
       const channel = conversation.channel.toLowerCase();
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
@@ -142,32 +170,49 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         status: 'answered',
         final_reply: replyText.trim() || null,
         uploaded_at: new Date().toISOString(),
+        reply_mode: channel === 'gmail' ? 'thread_reply' : 'channel_reply',
+        email_thread_id: channel === 'gmail' ? conversation.thread_id : undefined,
+        in_reply_to: channel === 'gmail' ? latestMessage?.id : undefined,
+        original_message_from: lastInbound?.message_from || conversation.message_from,
+        original_message_to: lastInbound?.message_to || conversation.message_to,
+        resolved_customer_email: extractedContact.email || undefined,
+        resolved_customer_phone: extractedContact.phone || undefined,
+        latest_customer_message: cleanMessageText(lastInbound?.user_message),
+        conversation_history: JSON.stringify(recentHistory),
       };
 
-      if (agentImageUrl) payload.agent_image_url = agentImageUrl;
+      if (agentImageUrl) {
+        payload.agent_image_url = agentImageUrl;
+      }
 
       if (channel === 'ebay') {
-        const lastInbound = [...messages].reverse().find((m) => m.direction === 'inbound');
-
         if (lastInbound?.message_id_ebay) {
           const raw = lastInbound.message_id_ebay;
           const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
-          if (cleanId) payload.message_id_ebay = cleanId;
+          if (cleanId) {
+            payload.message_id_ebay = cleanId;
+          }
         }
         if (lastInbound?.item_id_ebay) {
           const raw = lastInbound.item_id_ebay;
           const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
-          if (cleanId) payload.item_id_ebay = cleanId;
+          if (cleanId) {
+            payload.item_id_ebay = cleanId;
+          }
         }
       }
 
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error('Failed to send message');
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
 
       toast({
         title: 'Sent!',
@@ -204,6 +249,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
   const channelIcon = getChannelIcon(conversation.channel);
   const badgeClass = getChannelBadgeClass(conversation.channel);
+  const latestInboundMessage = [...messages].reverse().find((message) => message.direction === 'inbound');
+  const latestInboundText = cleanMessageText(latestInboundMessage?.user_message);
+  const showTranslationTools = hasNonEnglishSignals(latestInboundText);
+  const inferredContact = extractContactInfo(latestInboundMessage?.user_message);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
@@ -213,12 +262,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
-
+        
         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-muted flex items-center justify-center text-base md:text-lg shrink-0">
             {channelIcon}
           </div>
-
+          
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-sm md:text-base text-foreground truncate">
               {conversation.sender_name}
@@ -227,13 +276,25 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               <span className="truncate">{conversation.thread_id}</span>
             </div>
           </div>
-
+          
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <Badge className={cn('capitalize text-xs', badgeClass)}>{conversation.channel}</Badge>
+            <Badge className={cn('capitalize text-xs', badgeClass)}>
+              {conversation.channel}
+            </Badge>
             <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] md:max-w-none">
               to: {conversation.message_to}
             </span>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={loadMessages}
+            className="h-8 w-8 shrink-0"
+            title="Refresh conversation"
+            disabled={loading}
+          >
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+          </Button>
         </div>
       </div>
 
@@ -257,6 +318,40 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </ScrollArea>
 
       <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
+        {(showTranslationTools || inferredContact.email || inferredContact.phone) && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {showTranslationTools && latestInboundText && (
+              <a
+                href={buildTranslateUrl(latestInboundText)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-medium text-foreground hover:bg-muted"
+              >
+                <Languages className="h-3.5 w-3.5" />
+                Translate customer message
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            {replyText.trim() && (
+              <a
+                href={buildTranslateUrl(replyText, 'en')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-medium text-foreground hover:bg-muted"
+              >
+                <Languages className="h-3.5 w-3.5" />
+                Translate reply to English
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+            {(inferredContact.email || inferredContact.phone) && (
+              <span className="rounded-md bg-muted px-2 py-1">
+                Detected contact: {inferredContact.email || inferredContact.phone}
+              </span>
+            )}
+          </div>
+        )}
+
         {mediaPreview && (
           <div className="relative inline-block mb-3 shrink-0">
             {selectedMedia?.type.startsWith('video/') ? (
@@ -277,7 +372,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             )}
           </div>
         )}
-
+        
         <div className="flex items-end gap-2 min-h-0">
           <input
             type="file"
@@ -286,7 +381,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             accept="image/*,video/*"
             className="hidden"
           />
-
+          
           <Button
             variant="ghost"
             size="icon"
@@ -297,7 +392,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           >
             <ImagePlus className="w-5 h-5" />
           </Button>
-
+          
           <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
             <Textarea
               value={replyText}
@@ -311,13 +406,21 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               rows={1}
             />
           </div>
-
-          <Button onClick={handleSend} disabled={sending || (!replyText.trim() && !selectedMedia)} className="shrink-0 mb-0.5">
+          
+          <Button
+            onClick={handleSend}
+            disabled={sending || (!replyText.trim() && !selectedMedia)}
+            className="shrink-0 mb-0.5"
+          >
             {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </Button>
         </div>
-
-        {replyText && <p className="text-xs text-muted-foreground mt-2">Reply draft is saved locally until you send it.</p>}
+        
+        {replyText && (
+          <p className="text-xs text-muted-foreground mt-2">
+            AI suggested reply loaded. Edit if needed, then press send.
+          </p>
+        )}
       </div>
     </div>
   );
