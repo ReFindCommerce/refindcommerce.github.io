@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
 import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
@@ -28,6 +28,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const messagesScrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -46,9 +47,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   }, [conversation?.thread_id]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useLayoutEffect(() => {
+    scrollToBottom('auto');
+  }, [messages.length, conversation?.thread_id]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -97,8 +98,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const viewport = messagesScrollAreaRef.current?.querySelector<HTMLElement>(
+      '[data-radix-scroll-area-viewport]'
+    );
+
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+      return;
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
   };
 
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -327,7 +337,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-3 md:p-4">
+      <ScrollArea ref={messagesScrollAreaRef} className="flex-1 p-3 md:p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
