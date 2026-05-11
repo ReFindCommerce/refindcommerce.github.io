@@ -31,7 +31,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const messagesScrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRetryTimersRef = useRef<number[]>([]);
   const { toast } = useToast();
+  const latestMessageId = messages[messages.length - 1]?.id;
 
   useEffect(() => {
     if (conversation) {
@@ -48,8 +50,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   }, [conversation?.thread_id]);
 
   useLayoutEffect(() => {
-    scrollToBottom('auto');
-  }, [messages.length, conversation?.thread_id]);
+    if (!loading && messages.length > 0) {
+      queueScrollToBottom();
+    }
+
+    return clearScrollRetries;
+  }, [loading, latestMessageId, conversation?.thread_id]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -60,7 +66,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   }, [conversation?.thread_id, draftThreadId, replyText, selectedMedia]);
 
   useEffect(() => {
-    return () => setActiveDraftState(false);
+    return () => {
+      clearScrollRetries();
+      setActiveDraftState(false);
+    };
   }, []);
 
   const loadMessages = async () => {
@@ -98,7 +107,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   };
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+  const clearScrollRetries = () => {
+    scrollRetryTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    scrollRetryTimersRef.current = [];
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     const viewport = messagesScrollAreaRef.current?.querySelector<HTMLElement>(
       '[data-radix-scroll-area-viewport]'
     );
@@ -109,6 +123,20 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
 
     messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+  };
+
+  const queueScrollToBottom = () => {
+    clearScrollRetries();
+    scrollToBottom();
+
+    window.requestAnimationFrame(() => {
+      scrollToBottom();
+      window.requestAnimationFrame(() => scrollToBottom());
+    });
+
+    scrollRetryTimersRef.current = [50, 250, 750].map((delay) =>
+      window.setTimeout(() => scrollToBottom(), delay)
+    );
   };
 
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,7 +365,11 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={messagesScrollAreaRef} className="flex-1 p-3 md:p-4">
+      <ScrollArea
+        ref={messagesScrollAreaRef}
+        className="flex-1 p-3 md:p-4"
+        onLoadCapture={queueScrollToBottom}
+      >
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
