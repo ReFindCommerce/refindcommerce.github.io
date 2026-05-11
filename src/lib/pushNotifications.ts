@@ -1,4 +1,4 @@
-const VAPID_PUBLIC_KEY = 'BNdD1IDSX3YbVd1pjaZ7BNbl2cQ3LTd7T4khS4vyswCwRmQpSpx7La7lmkfjbHpmCLY0Rj0tM7FR_Tu003sHVnk';
+const VAPID_PUBLIC_KEY = 'BOgNDXzC0mNLDzz-D_IxjYrBh4jEtQ-Mh87iw9IIeJWg3--CS9pU5TJVWjDH35tXNzNm25hwd_mnOmdAIElaySI';
 const PUSH_SUBSCRIBE_WEBHOOK = 'https://n8n.srv1354140.hstgr.cloud/webhook/push-subscribe';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -12,6 +12,19 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   }
 
   return outputArray;
+}
+
+function uint8ArraysEqual(first: Uint8Array, second: Uint8Array): boolean {
+  if (first.length !== second.length) return false;
+  return first.every((value, index) => value === second[index]);
+}
+
+function subscriptionUsesCurrentKey(subscription: PushSubscription): boolean {
+  const currentKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+  const subscriptionKey = subscription.options.applicationServerKey;
+
+  if (!subscriptionKey) return false;
+  return uint8ArraysEqual(new Uint8Array(subscriptionKey), currentKey);
 }
 
 export function supportsPushNotifications(): boolean {
@@ -56,8 +69,13 @@ export async function enablePushNotifications(): Promise<void> {
 
   const registration = await navigator.serviceWorker.ready;
   const existingSubscription = await registration.pushManager.getSubscription();
+  if (existingSubscription && !subscriptionUsesCurrentKey(existingSubscription)) {
+    await existingSubscription.unsubscribe();
+  }
+
+  const currentSubscription = await registration.pushManager.getSubscription();
   const subscription =
-    existingSubscription ||
+    currentSubscription ||
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
