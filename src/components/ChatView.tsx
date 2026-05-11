@@ -212,7 +212,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         uploaded_at: new Date().toISOString(),
         reply_mode: channel === 'gmail' ? 'thread_reply' : 'channel_reply',
         email_thread_id: channel === 'gmail' ? conversation.thread_id : undefined,
-        in_reply_to: channel === 'gmail' ? latestMessage?.id : undefined,
+        in_reply_to: channel === 'gmail' ? lastInbound?.message_id_ebay || undefined : undefined,
         original_message_from: lastInbound?.message_from || conversation.message_from,
         original_message_to: lastInbound?.message_to || conversation.message_to,
         resolved_customer_email: extractedContact.email || undefined,
