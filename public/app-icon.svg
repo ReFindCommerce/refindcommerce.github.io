@@ -1,7 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">ReFind Inbox support icon</title>
   <rect width="512" height="512" rx="96" fill="#ffffff"/>
-  <rect x="88" y="126" width="336" height="260" rx="42" fill="#0f172a"/>
-  <path d="M122 168l112 91c13 11 31 11 44 0l112-91" fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="370" cy="144" r="54" fill="#ef4444"/>
-  <path d="M348 144h44M370 122v44" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="192" fill="none" stroke="#201c1e" stroke-width="34"/>
+  <path fill="#201c1e" d="M145 401c11-65 58-104 111-104s100 39 111 104c-31 22-69 35-111 35s-80-13-111-35z"/>
+  <path fill="#201c1e" d="M192 223c-15 0-27-13-27-29s12-29 27-29h128c15 0 27 13 27 29s-12 29-27 29H192z"/>
+  <path fill="#201c1e" d="M177 178c0-58 35-96 84-96 48 0 79 31 79 79v48c0 61-36 108-84 108s-79-47-79-108v-31z"/>
+  <path fill="#ffffff" d="M205 178c24-8 34-36 48-36 24 25 51 37 87 36v40c0 45-30 81-79 81s-56-44-56-81v-40z"/>
+  <path fill="#201c1e" d="M178 190c-18 0-32 15-32 34s14 34 32 34h16v-68h-16zm156 0v68h16c18 0 32-15 32-34s-14-34-32-34h-16z"/>
+  <path fill="none" stroke="#201c1e" stroke-width="15" stroke-linecap="round" d="M164 218c0 76 37 116 92 116 39 0 63-17 78-45"/>
+  <path fill="none" stroke="#201c1e" stroke-width="13" stroke-linecap="round" d="M339 248c22 0 38-9 43-26"/>
+  <rect x="250" y="282" width="49" height="22" rx="11" fill="#201c1e"/>
+  <path fill="#ffffff" d="M224 329l23 82 15-73-25-20-13 11zm64-11-25 20 15 73 23-82-13-11z"/>
 </svg>
