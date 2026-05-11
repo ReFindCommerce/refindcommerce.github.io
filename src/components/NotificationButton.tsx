@@ -15,6 +15,7 @@ import {
   getPushPermissionState,
   isIosBrowser,
   isStandaloneApp,
+  syncPushSubscription,
   supportsPushNotifications,
 } from '@/lib/pushNotifications';
 
@@ -22,57 +23,88 @@ export function NotificationButton() {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [loading, setLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    getPushPermissionState().then(setPermission);
+    getPushPermissionState().then((state) => {
+      setPermission(state);
+      if (state === 'granted') {
+        syncNotifications({ silent: true }).catch(() => undefined);
+      }
+    });
   }, []);
 
-  const enableNotifications = async () => {
-    if (permission === 'granted' || permission === 'denied') {
-      setDetailsOpen(true);
-      return;
-    }
-
+  const syncNotifications = async ({ silent = false } = {}) => {
     if (!supportsPushNotifications()) {
-      toast({
-        title: 'Notifications unavailable',
-        description: isIosBrowser()
-          ? 'Open this inbox in Safari, add it to your Home Screen, then enable notifications from the installed app.'
-          : 'This browser does not support app notifications.',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Notifications unavailable',
+          description: isIosBrowser()
+            ? 'Open this inbox in Safari, add it to your Home Screen, then enable notifications from the installed app.'
+            : 'This browser does not support app notifications.',
+          variant: 'destructive',
+        });
+      }
       return;
     }
 
     if (isIosBrowser() && !isStandaloneApp()) {
-      toast({
-        title: 'Install first',
-        description: 'On iPhone, open in Safari and use Share > Add to Home Screen. Then open the installed app and enable notifications.',
-      });
+      if (!silent) {
+        toast({
+          title: 'Install first',
+          description: 'On iPhone, open in Safari and use Share > Add to Home Screen. Then open the installed app and enable notifications.',
+        });
+      }
       return;
     }
 
     setLoading(true);
 
     try {
-      await enablePushNotifications();
+      if (Notification.permission === 'granted') {
+        await syncPushSubscription();
+      } else {
+        await enablePushNotifications();
+      }
+
       setPermission('granted');
+      setLastSyncedAt(new Date().toLocaleTimeString());
+
+      if (silent) return;
+
       toast({
         title: 'Notifications enabled',
-        description: 'New customer messages can now appear as app notifications on this device.',
+        description: 'This device is connected for new message notifications.',
       });
     } catch (error) {
       console.error('Failed to enable notifications:', error);
-      toast({
-        title: 'Notifications not enabled',
-        description: error instanceof Error ? error.message : 'Please try again.',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Notifications not enabled',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      }
       setPermission(await getPushPermissionState());
     } finally {
       setLoading(false);
     }
+  };
+
+  const enableNotifications = async () => {
+    if (permission === 'denied') {
+      setDetailsOpen(true);
+      return;
+    }
+
+    if (permission === 'granted') {
+      await syncNotifications();
+      setDetailsOpen(true);
+      return;
+    }
+
+    await syncNotifications();
   };
 
   const showLocalTest = async () => {
@@ -131,6 +163,7 @@ export function NotificationButton() {
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Device permission: {permission}</p>
             <p>App mode: {isStandaloneApp() ? 'installed app' : 'browser tab'}</p>
+            {lastSyncedAt && <p>Backend sync: {lastSyncedAt}</p>}
             {permission === 'denied' && (
               <p>
                 Open the phone or browser notification settings for ReFind Inbox, allow notifications, then return and
@@ -141,21 +174,27 @@ export function NotificationButton() {
 
           <DialogFooter>
             {permission === 'granted' && (
-              <Button
-                type="button"
-                onClick={() => {
-                  showLocalTest().catch((error) => {
-                    console.error('Local notification test failed:', error);
-                    toast({
-                      title: 'Test failed',
-                      description: 'The device allowed notifications, but the local test could not be shown.',
-                      variant: 'destructive',
+              <>
+                <Button type="button" variant="outline" disabled={loading} onClick={() => syncNotifications()}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Sync
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    showLocalTest().catch((error) => {
+                      console.error('Local notification test failed:', error);
+                      toast({
+                        title: 'Test failed',
+                        description: 'The device allowed notifications, but the local test could not be shown.',
+                        variant: 'destructive',
+                      });
                     });
-                  });
-                }}
-              >
-                Test
-              </Button>
+                  }}
+                >
+                  Test
+                </Button>
+              </>
             )}
           </DialogFooter>
         </DialogContent>
