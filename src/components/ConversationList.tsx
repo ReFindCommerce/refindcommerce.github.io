@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversation, Channel, FilterOptions } from '@/types/inbox';
 import { ConversationItem } from './ConversationItem';
 import { FilterPanel } from './FilterPanel';
+import { InstallAppButton } from './InstallAppButton';
 import { fetchConversations } from '@/lib/supabase';
 import { useHiddenThreads } from '@/hooks/useHiddenThreads';
 import { Search, Filter, Inbox, RefreshCw, Check } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { normalizeCompactText, normalizeSearchText } from '@/lib/textFormat';
 
 interface ConversationListProps {
   selectedThreadId: string | null;
@@ -21,6 +23,8 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [hideMode, setHideMode] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedToHide, setSelectedToHide] = useState<string[]>([]);
   const [hideSelectionInitialized, setHideSelectionInitialized] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -29,30 +33,53 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     message_to: [],
   });
   const isFirstLoad = useRef(true);
+  const loadRequestId = useRef(0);
   
   const { hiddenThreadIds, hideThreads, showThreads, isHidden, loading: hiddenLoading } = useHiddenThreads();
 
-  const loadConversations = async (showLoader = false) => {
-    if (showLoader) setLoading(true);
-    const data = await fetchConversations({
-      channels: filters.channels.length > 0 ? filters.channels : undefined,
-      thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
-      message_to: filters.message_to.length > 0 ? filters.message_to : undefined,
-    });
-    setConversations(data);
-    setLoading(false);
-    isFirstLoad.current = false;
-  };
+  const loadConversations = useCallback(async (showLoader = false) => {
+    const requestId = ++loadRequestId.current;
+
+    if (showLoader) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    try {
+      const data = await fetchConversations({
+        channels: filters.channels.length > 0 ? filters.channels : undefined,
+        thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
+        message_to: filters.message_to.length > 0 ? filters.message_to : undefined,
+      });
+
+      if (requestId !== loadRequestId.current) return;
+
+      setConversations(data);
+      setLoadError(null);
+      isFirstLoad.current = false;
+    } catch (error) {
+      console.error('Failed to refresh conversations:', error);
+      if (requestId === loadRequestId.current) {
+        setLoadError('Refresh failed. Showing the last loaded conversations.');
+      }
+    } finally {
+      if (requestId === loadRequestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [filters]);
 
   useEffect(() => {
     loadConversations(true);
-  }, [filters]);
+  }, [loadConversations]);
 
   // Silent refresh every 10 seconds
   useEffect(() => {
     const interval = setInterval(() => loadConversations(false), 10000);
     return () => clearInterval(interval);
-  }, [filters]);
+  }, [loadConversations]);
 
   const enterHideMode = () => {
     // Start hide mode; selection will be initialized once hidden threads are loaded
@@ -101,14 +128,26 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     ? conversations 
     : conversations.filter(conv => !isHidden(conv.thread_id));
 
-  const filteredConversations = visibleConversations.filter(conv => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
+  const filteredConversations = visibleConversations.filter((conv) => {
+    const query = normalizeSearchText(searchQuery);
+    const compactQuery = normalizeCompactText(searchQuery);
+    if (!query) return true;
+
+    const searchable = normalizeSearchText([
+      conv.sender_name,
+      conv.thread_id,
+      conv.message_from,
+      conv.message_to,
+      conv.channel,
+      conv.status,
+      conv.last_message,
+    ].filter(Boolean).join(' '));
+    const compactSearchable = normalizeCompactText(searchable);
+
     return (
-      conv.sender_name.toLowerCase().includes(query) ||
-      conv.thread_id.toLowerCase().includes(query) ||
-      conv.message_from.toLowerCase().includes(query) ||
-      conv.channel.toLowerCase().includes(query)
+      searchable.includes(query) ||
+      query.split(' ').every((term) => searchable.includes(term)) ||
+      (!!compactQuery && compactSearchable.includes(compactQuery))
     );
   });
 
@@ -135,14 +174,16 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             </Button>
           ) : (
             <div className="flex items-center gap-2">
+              <InstallAppButton />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => loadConversations(true)}
                 className="h-8 w-8"
                 title="Refresh"
+                disabled={loading || refreshing}
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={cn('w-4 h-4', (loading || refreshing) && 'animate-spin')} />
               </Button>
               <Button
                 variant={hasActiveFilters ? "default" : "ghost"}
@@ -159,7 +200,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
         
         {hideMode && (
           <div className="text-sm text-muted-foreground bg-muted/50 p-2 rounded-md mb-4">
-            Выберите чаты для скрытия. Отмеченные чаты не будут показываться.
+            Select conversations to hide. Checked conversations will not show in the normal inbox.
           </div>
         )}
         
@@ -174,6 +215,10 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             className="pl-10 bg-background"
           />
         </div>
+
+        {loadError && (
+          <p className="mt-2 text-xs text-destructive">{loadError}</p>
+        )}
       </div>
 
       {/* Filter Panel */}
