@@ -7,11 +7,33 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const TABLE_NAME = 'inbox_messages';
+const MESSAGE_SELECT = [
+  'id',
+  'channel',
+  'thread_id',
+  'message_from',
+  'message_to',
+  'sender_name',
+  'user_type',
+  'direction',
+  'user_message',
+  'final_reply',
+  'ai_reply',
+  'status',
+  'uploaded_at',
+  'customer_image_url',
+  'agent_image_url',
+  'image_url',
+  'ebay_image',
+  'message_id_ebay',
+  'item_id_ebay',
+  'subject_ebay_message',
+].join(',');
 
 export async function fetchMessages(threadId: string): Promise<Message[]> {
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select('*')
+    .select(MESSAGE_SELECT)
     .eq('thread_id', threadId)
     .order('uploaded_at', { ascending: true });
 
@@ -47,7 +69,7 @@ export async function fetchConversations(filters?: {
 }): Promise<Conversation[]> {
   let query = supabase
     .from(TABLE_NAME)
-    .select('*')
+    .select(MESSAGE_SELECT)
     .order('uploaded_at', { ascending: true })
     .order('id', { ascending: true });
 
@@ -72,7 +94,7 @@ export async function fetchConversations(filters?: {
 
   if (error) {
     console.error('Error fetching conversations:', error);
-    return [];
+    throw error;
   }
 
   // Group messages by thread_id
@@ -84,7 +106,7 @@ export async function fetchConversations(filters?: {
     if (!existing) {
       conversationMap.set(msg.thread_id, {
         thread_id: msg.thread_id,
-        sender_name: msg.sender_name,
+        sender_name: msg.sender_name || msg.message_from || msg.thread_id,
         channel: msg.channel,
         message_from: msg.message_from,
         message_to: msg.message_to,
@@ -99,9 +121,10 @@ export async function fetchConversations(filters?: {
       const existingTime = new Date(existing.last_message_time).getTime();
       
       if (msgTime >= existingTime) {
-      existing.last_message = msg.user_message || msg.final_reply || '';
+        existing.last_message = msg.user_message || msg.final_reply || '';
         existing.last_message_time = msg.uploaded_at;
         existing.status = msg.direction === 'outbound' ? 'answered' : 'new';
+        existing.sender_name = existing.sender_name || msg.sender_name || msg.message_from || msg.thread_id;
       }
       
       if (msg.status === 'new') {
@@ -146,6 +169,7 @@ export async function getLatestAiReply(threadId: string): Promise<string | null>
     .from(TABLE_NAME)
     .select('ai_reply')
     .eq('thread_id', threadId)
+    .not('ai_reply', 'is', null)
     .order('uploaded_at', { ascending: false })
     .limit(1)
     .maybeSingle();
