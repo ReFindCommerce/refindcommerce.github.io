@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
-import { fetchMessages, fetchSavedReplySuggestions, getLatestAiReply, type SavedReplySuggestion } from '@/lib/supabase';
+import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Copy } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,7 +28,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [savedReplies, setSavedReplies] = useState<SavedReplySuggestion[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -70,13 +69,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     try {
       const data = await fetchMessages(conversation.thread_id);
       setMessages(data);
-      const lastInbound = [...data].reverse().find((message) => message.direction === 'inbound');
-      const suggestions = await fetchSavedReplySuggestions({
-        message: lastInbound?.user_message,
-        channel: conversation.channel,
-        message_to: lastInbound?.message_to || conversation.message_to,
-      });
-      setSavedReplies(suggestions);
       
       const savedDraft = loadDraft(conversation.thread_id);
 
@@ -87,8 +79,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         const aiReply = await getLatestAiReply(conversation.thread_id);
         if (aiReply) {
           setReplyText(aiReply);
-        } else if (suggestions[0]?.answer) {
-          setReplyText(suggestions[0].answer);
         } else {
           setReplyText('');
         }
@@ -131,23 +121,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
   };
 
-  const copyToClipboard = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({
-        title: 'Copied',
-        description: `${label} copied to clipboard.`,
-      });
-    } catch (error) {
-      console.error('Copy failed:', error);
-      toast({
-        title: 'Copy failed',
-        description: 'Please select and copy the text manually.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   const handleSend = async () => {
     if (!conversation || (!replyText.trim() && !selectedMedia)) return;
 
@@ -186,6 +159,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       // Get the latest message data to use as base
       const latestMessage = messages[messages.length - 1];
       const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
+      const gmailMessageId = lastInbound?.gmail_message_id || lastInbound?.message_id_ebay || undefined;
+      const gmailThreadId = lastInbound?.gmail_thread_id || conversation.thread_id;
       const recentHistory = messages.slice(-12).map((message) => ({
         direction: message.direction,
         at: message.uploaded_at,
@@ -211,8 +186,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         final_reply: replyText.trim() || null,
         uploaded_at: new Date().toISOString(),
         reply_mode: channel === 'gmail' ? 'thread_reply' : 'channel_reply',
-        email_thread_id: channel === 'gmail' ? conversation.thread_id : undefined,
-        in_reply_to: channel === 'gmail' ? lastInbound?.message_id_ebay || undefined : undefined,
+        email_thread_id: channel === 'gmail' ? gmailThreadId : undefined,
+        gmail_thread_id: channel === 'gmail' ? gmailThreadId : undefined,
+        gmail_message_id: channel === 'gmail' ? gmailMessageId : undefined,
+        in_reply_to: channel === 'gmail' ? gmailMessageId : undefined,
         original_message_from: lastInbound?.message_from || conversation.message_from,
         original_message_to: lastInbound?.message_to || conversation.message_to,
         resolved_customer_email: extractedContact.email || undefined,
@@ -268,7 +245,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       // Clear inputs
       clearDraft(conversation.thread_id);
       setReplyText('');
-      setSavedReplies([]);
       removeMedia();
       
       // Reload messages after a short delay
@@ -372,7 +348,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
       {/* Input Area */}
       <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
-        {(showTranslationTools || inferredContact.email || inferredContact.phone || (latestInboundText && replyText.trim())) && (
+        {(showTranslationTools || inferredContact.email || inferredContact.phone || replyText.trim()) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {showTranslationTools && latestInboundText && (
               <a
@@ -403,59 +379,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 Detected contact: {inferredContact.email || inferredContact.phone}
               </span>
             )}
-            {latestInboundText && replyText.trim() && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 text-xs"
-                onClick={() =>
-                  copyToClipboard(
-                    JSON.stringify(
-                      {
-                        question: latestInboundText,
-                        answer: replyText.trim(),
-                        channel: conversation.channel,
-                        message_to: conversation.message_to,
-                      },
-                      null,
-                      2,
-                    ),
-                    'saved reply draft',
-                  )
-                }
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Copy saved reply
-              </Button>
-            )}
-          </div>
-        )}
-        {savedReplies.length > 0 && (
-          <div className="mb-3 space-y-2 rounded-md border bg-background p-2 text-xs">
-            <div className="font-medium text-foreground">Saved replies</div>
-            {savedReplies.map((reply) => (
-              <div key={`${reply.question}-${reply.message_to || ''}`} className="flex gap-2 rounded-sm border p-2">
-                <button
-                  type="button"
-                  onClick={() => setReplyText(reply.answer)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="line-clamp-1 font-medium text-foreground">{reply.question}</span>
-                  <span className="line-clamp-2 text-muted-foreground">{reply.answer}</span>
-                </button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  title="Copy saved reply"
-                  onClick={() => copyToClipboard(reply.answer, 'saved reply')}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
           </div>
         )}
         {/* Attachment Preview */}
