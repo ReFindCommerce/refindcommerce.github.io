@@ -1,4 +1,4 @@
-const CACHE_NAME = "refind-inbox-v3";
+const CACHE_NAME = "refind-inbox-v4";
 const APP_ASSETS = [
   "/",
   "/index.html",
@@ -49,4 +49,54 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+});
+
+self.addEventListener("push", (event) => {
+  const fallback = {
+    title: "New customer message",
+    body: "Open ReFind Inbox to view the latest message.",
+    url: "/",
+  };
+
+  let payload = fallback;
+
+  if (event.data) {
+    try {
+      payload = { ...fallback, ...event.data.json() };
+    } catch {
+      payload = { ...fallback, body: event.data.text() || fallback.body };
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/app-icon.svg",
+      badge: "/app-icon.svg",
+      tag: payload.tag || "refind-inbox-message",
+      data: { url: payload.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client && client.url.startsWith(self.location.origin)) {
+          return client.focus();
+        }
+      }
+
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
+      }
+
+      return undefined;
+    })
+  );
 });
