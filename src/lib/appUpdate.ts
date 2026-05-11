@@ -1,8 +1,15 @@
 import { hasSavedDrafts, onActiveDraftStateChange } from './draftState';
 
+const APP_UPDATE_EVENT = 'refind-app-update-available';
+
 let hasActiveEditorDraft = false;
 let pendingWorker: ServiceWorker | null = null;
 let reloadingForUpdate = false;
+let activeRegistration: ServiceWorkerRegistration | null = null;
+
+function notifyUpdateAvailable(): void {
+  window.dispatchEvent(new CustomEvent(APP_UPDATE_EVENT, { detail: { available: true } }));
+}
 
 function canReloadForUpdate(): boolean {
   return !hasActiveEditorDraft && !hasSavedDrafts();
@@ -15,7 +22,33 @@ function activatePendingUpdate(): void {
   pendingWorker = null;
 }
 
+export function hasPendingAppUpdate(): boolean {
+  return Boolean(pendingWorker);
+}
+
+export function applyPendingAppUpdate(): boolean {
+  if (!pendingWorker) return false;
+
+  pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+  pendingWorker = null;
+  return true;
+}
+
+export async function checkForAppUpdate(): Promise<boolean> {
+  if (!activeRegistration) return false;
+
+  await activeRegistration.update();
+  return Boolean(pendingWorker || activeRegistration.waiting);
+}
+
+export function onAppUpdateAvailable(callback: () => void): () => void {
+  window.addEventListener(APP_UPDATE_EVENT, callback);
+  return () => window.removeEventListener(APP_UPDATE_EVENT, callback);
+}
+
 export function watchAppUpdates(registration: ServiceWorkerRegistration): void {
+  activeRegistration = registration;
+
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'ACTIVE_DRAFT_STATE') {
       hasActiveEditorDraft = Boolean(event.data.active);
@@ -37,6 +70,7 @@ export function watchAppUpdates(registration: ServiceWorkerRegistration): void {
   const handleInstalledWorker = (worker: ServiceWorker) => {
     if (worker.state !== 'installed' || !navigator.serviceWorker.controller) return;
     pendingWorker = worker;
+    notifyUpdateAvailable();
     activatePendingUpdate();
   };
 
@@ -51,6 +85,7 @@ export function watchAppUpdates(registration: ServiceWorkerRegistration): void {
 
   if (registration.waiting) {
     pendingWorker = registration.waiting;
+    notifyUpdateAvailable();
     activatePendingUpdate();
   }
 }
