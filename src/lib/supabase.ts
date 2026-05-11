@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Message, Conversation, Channel } from '@/types/inbox';
+import { normalizeSearchText } from './textFormat';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -7,6 +8,7 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const TABLE_NAME = 'inbox_messages';
+const QA_TABLE_NAME = 'qa_pairs';
 const MESSAGE_SELECT = [
   'id',
   'channel',
@@ -180,6 +182,62 @@ export async function getLatestAiReply(threadId: string): Promise<string | null>
   }
 
   return data?.ai_reply || null;
+}
+
+export interface SavedReplySuggestion {
+  question: string;
+  answer: string;
+  channel: string | null;
+  message_to: string | null;
+  score: number;
+}
+
+function scoreSavedReply(query: string, question: string): number {
+  const queryTerms = new Set(normalizeSearchText(query).split(' ').filter((term) => term.length > 2));
+  const questionTerms = new Set(normalizeSearchText(question).split(' ').filter((term) => term.length > 2));
+  if (!queryTerms.size || !questionTerms.size) return 0;
+
+  let matches = 0;
+  queryTerms.forEach((term) => {
+    if (questionTerms.has(term)) matches += 1;
+  });
+
+  return matches / Math.max(queryTerms.size, questionTerms.size);
+}
+
+export async function fetchSavedReplySuggestions(options: {
+  message: string | null | undefined;
+  channel?: Channel;
+  message_to?: string | null;
+}): Promise<SavedReplySuggestion[]> {
+  const cleanMessage = normalizeSearchText(options.message);
+  if (!cleanMessage) return [];
+
+  const { data, error } = await supabase
+    .from(QA_TABLE_NAME)
+    .select('question, answer, channel, message_to')
+    .limit(500);
+
+  if (error) {
+    console.error('Error fetching saved reply suggestions:', error);
+    return [];
+  }
+
+  return (data || [])
+    .map((row) => {
+      const channelBoost = options.channel && row.channel === options.channel ? 0.12 : 0;
+      const recipientBoost = options.message_to && row.message_to === options.message_to ? 0.08 : 0;
+      return {
+        question: row.question || '',
+        answer: row.answer || '',
+        channel: row.channel || null,
+        message_to: row.message_to || null,
+        score: scoreSavedReply(cleanMessage, row.question || '') + channelBoost + recipientBoost,
+      };
+    })
+    .filter((row) => row.answer && row.score >= 0.18)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
 }
 
 export async function getDistinctValues(column: 'channel' | 'thread_id' | 'message_to'): Promise<string[]> {
