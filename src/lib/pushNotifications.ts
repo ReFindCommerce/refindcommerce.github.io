@@ -63,18 +63,22 @@ export async function enablePushNotifications(): Promise<void> {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     }));
 
-  const response = await fetch(PUSH_SUBSCRIBE_WEBHOOK, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      subscription,
-      userAgent: window.navigator.userAgent,
-      appUrl: window.location.origin,
-      enabledAt: new Date().toISOString(),
-    }),
-  });
+  try {
+    const response = await fetch(PUSH_SUBSCRIBE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription,
+        userAgent: window.navigator.userAgent,
+        appUrl: window.location.origin,
+        enabledAt: new Date().toISOString(),
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error('Notification permission was granted, but the subscription could not be saved.');
+    if (!response.ok) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error('Notifications are allowed on this device, but the notification backend is not connected yet.');
   }
 }
