@@ -106,6 +106,7 @@ export function InstallAppButton() {
         onClick={installApp}
         className="h-8 w-8"
         title="Install app"
+        aria-label="Install app"
       >
         <Download className="w-4 h-4" />
       </Button>
