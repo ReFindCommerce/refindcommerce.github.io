@@ -32,36 +32,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const loadMessages = async () => {
-    if (!conversation) return;
-    
-    setLoading(true);
-    try {
-      const data = await fetchMessages(conversation.thread_id);
-      setMessages(data);
-      
-      const savedDraft = loadDraft(conversation.thread_id);
-
-      if (savedDraft) {
-        setReplyText(savedDraft);
-      } else {
-        const aiReply = await getLatestAiReply(conversation.thread_id);
-        setReplyText(aiReply || '');
-      }
-
-      setDraftThreadId(conversation.thread_id);
-    } catch (error) {
-      console.error('Failed to load messages:', error);
-      toast({
-        title: 'Could not load messages',
-        description: 'Please try refreshing this conversation.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (conversation) {
       setDraftThreadId(null);
@@ -77,7 +47,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   }, [conversation?.thread_id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollToBottom();
   }, [messages]);
 
   useEffect(() => {
@@ -91,6 +61,45 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   useEffect(() => {
     return () => setActiveDraftState(false);
   }, []);
+
+  const loadMessages = async () => {
+    if (!conversation) return;
+    
+    setLoading(true);
+    try {
+      const data = await fetchMessages(conversation.thread_id);
+      setMessages(data);
+      
+      const savedDraft = loadDraft(conversation.thread_id);
+
+      if (savedDraft) {
+        setReplyText(savedDraft);
+      } else {
+        // Get the latest AI reply for the input field
+        const aiReply = await getLatestAiReply(conversation.thread_id);
+        if (aiReply) {
+          setReplyText(aiReply);
+        } else {
+          setReplyText('');
+        }
+      }
+
+      setDraftThreadId(conversation.thread_id);
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+      toast({
+        title: 'Could not load messages',
+        description: 'Please try refreshing this conversation.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -147,6 +156,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         setUploadingImage(false);
       }
 
+      // Get the latest message data to use as base
       const latestMessage = messages[messages.length - 1];
       const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
       const recentHistory = messages.slice(-12).map((message) => ({
@@ -155,9 +165,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         text: cleanMessageText(message.user_message || message.final_reply || message.ai_reply),
       }));
       const extractedContact = extractContactInfo(lastInbound?.user_message || '');
+      
+      // Determine webhook URL based on channel
       const channel = conversation.channel.toLowerCase();
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
+      // Prepare the payload
       const payload: Record<string, string | null | undefined> = {
         id: latestMessage?.id || crypto.randomUUID(),
         channel: conversation.channel,
@@ -178,15 +191,20 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         resolved_customer_email: extractedContact.email || undefined,
         resolved_customer_phone: extractedContact.phone || undefined,
         latest_customer_message: cleanMessageText(lastInbound?.user_message),
+        email_subject: lastInbound?.subject_ebay_message || undefined,
+        subject_ebay_message: lastInbound?.subject_ebay_message || undefined,
         conversation_history: JSON.stringify(recentHistory),
       };
 
+      // Add image URL if present
       if (agentImageUrl) {
         payload.agent_image_url = agentImageUrl;
       }
 
+      // Find eBay IDs from the last inbound message only
       if (channel === 'ebay') {
         if (lastInbound?.message_id_ebay) {
+          // Extract plain string ID, ignoring any nested arrays from previous sends
           const raw = lastInbound.message_id_ebay;
           const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
           if (cleanId) {
@@ -202,6 +220,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         }
       }
 
+      // Send to webhook
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -219,10 +238,14 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         description: 'Your reply has been sent successfully.',
       });
 
+      // Clear inputs
       clearDraft(conversation.thread_id);
       setReplyText('');
       removeMedia();
+      
+      // Reload messages after a short delay
       setTimeout(loadMessages, 1000);
+
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -256,6 +279,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
+      {/* Header */}
       <div className="flex items-center gap-2 p-3 md:p-4 border-b border-border bg-card">
         {onBack && (
           <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
@@ -298,6 +322,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         </div>
       </div>
 
+      {/* Messages */}
       <ScrollArea className="flex-1 p-3 md:p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
@@ -317,6 +342,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         )}
       </ScrollArea>
 
+      {/* Input Area */}
       <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
         {(showTranslationTools || inferredContact.email || inferredContact.phone) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -351,13 +377,21 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             )}
           </div>
         )}
-
+        {/* Attachment Preview */}
         {mediaPreview && (
           <div className="relative inline-block mb-3 shrink-0">
             {selectedMedia?.type.startsWith('video/') ? (
-              <video src={mediaPreview} className="max-h-32 rounded-lg shadow-sm" controls />
+              <video
+                src={mediaPreview}
+                className="max-h-32 rounded-lg shadow-sm"
+                controls
+              />
             ) : (
-              <img src={mediaPreview} alt="Selected" className="max-h-32 rounded-lg shadow-sm" />
+              <img
+                src={mediaPreview}
+                alt="Selected"
+                className="max-h-32 rounded-lg shadow-sm"
+              />
             )}
             <button
               onClick={removeMedia}
@@ -412,7 +446,11 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             disabled={sending || (!replyText.trim() && !selectedMedia)}
             className="shrink-0 mb-0.5"
           >
-            {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            {sending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
           </Button>
         </div>
         
