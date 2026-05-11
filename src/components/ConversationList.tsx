@@ -3,6 +3,7 @@ import { Conversation, Channel, FilterOptions } from '@/types/inbox';
 import { ConversationItem } from './ConversationItem';
 import { FilterPanel } from './FilterPanel';
 import { InstallAppButton } from './InstallAppButton';
+import { NotificationButton } from './NotificationButton';
 import { fetchConversations } from '@/lib/supabase';
 import { useHiddenThreads } from '@/hooks/useHiddenThreads';
 import { Search, Filter, Inbox, RefreshCw, Check } from 'lucide-react';
@@ -174,6 +175,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
             </Button>
           ) : (
             <div className="flex items-center gap-2">
+              <NotificationButton />
               <InstallAppButton />
               <Button
                 variant="ghost"
