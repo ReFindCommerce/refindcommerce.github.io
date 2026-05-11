@@ -15,10 +15,50 @@ function isStandaloneApp(): boolean {
   );
 }
 
+function getInstallInstructions() {
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const isIos = /iphone|ipad|ipod/.test(userAgent);
+  const isAndroid = /android/.test(userAgent);
+
+  if (isIos) {
+    return {
+      title: 'Install on iPhone',
+      steps: [
+        'Open this page in Safari.',
+        'Tap the Share button.',
+        'Choose Add to Home Screen, then tap Add.',
+      ],
+      note: 'iPhone does not use a normal download button for this type of app, and Chrome on iPhone may not show the Add to Home Screen option.',
+    };
+  }
+
+  if (isAndroid) {
+    return {
+      title: 'Install on Android',
+      steps: [
+        'Open this page in Chrome.',
+        'Tap the browser menu.',
+        'Choose Install app or Add to Home screen.',
+      ],
+      note: 'If the option is missing, refresh once after deployment and try again.',
+    };
+  }
+
+  return {
+    title: 'Install ReFind Inbox',
+    steps: [
+      'Open this inbox in Chrome or Edge.',
+      'Use the install icon in the address bar, or choose Install app from the browser menu.',
+    ],
+    note: 'The installed app is the same inbox, just opened in its own app-style window.',
+  };
+}
+
 export function InstallAppButton() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const instructions = getInstallInstructions();
 
   useEffect(() => {
     setInstalled(isStandaloneApp());
@@ -73,16 +113,15 @@ export function InstallAppButton() {
       <Dialog open={showInstructions} onOpenChange={setShowInstructions}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Install ReFind Inbox</DialogTitle>
+            <DialogTitle>{instructions.title}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              Open this inbox in Chrome or Edge, then use the install icon in the address bar or choose
-              Install app from the browser menu.
-            </p>
-            <p>
-              If the install option is missing, refresh once after the app has been deployed and try again.
-            </p>
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <ol className="list-decimal space-y-2 pl-5">
+              {instructions.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p>{instructions.note}</p>
           </div>
         </DialogContent>
       </Dialog>
