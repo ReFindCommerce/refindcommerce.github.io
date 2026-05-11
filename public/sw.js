@@ -1,4 +1,4 @@
-const CACHE_NAME = "refind-inbox-v15";
+const CACHE_NAME = "refind-inbox-v16";
 const APP_ASSETS = [
   "/",
   "/index.html",
