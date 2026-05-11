@@ -25,6 +25,9 @@ export interface Message {
   image_url: string | null;
   ebay_image: string | null;
   message_id_ebay: string | null;
+  gmail_message_id: string | null;
+  gmail_thread_id: string | null;
+  in_reply_to: string | null;
   item_id_ebay: string | null;
   subject_ebay_message?: string | null;
 }
