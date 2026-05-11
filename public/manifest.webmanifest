@@ -1,0 +1,19 @@
+{
+  "name": "ReFind Inbox",
+  "short_name": "Inbox",
+  "description": "Unified customer inbox for ReFind Commerce and EasyTag.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
