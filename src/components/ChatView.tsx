@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
-import { fetchMessages, getLatestAiReply, uploadImage } from '@/lib/supabase';
-import { getChannelBadgeClass, getChannelIcon, formatDateTime } from '@/lib/channelUtils';
+import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
+import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
 import { Send, ImagePlus, X, Loader2, ArrowLeft, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { clearDraft, loadDraft, saveDraft, setActiveDraftState } from '@/lib/draftState';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -20,8 +21,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [draftThreadId, setDraftThreadId] = useState<string | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,102 +32,104 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
   useEffect(() => {
     if (conversation) {
+      setDraftThreadId(null);
+      setSelectedMedia(null);
+      setMediaPreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       loadMessages();
+    } else {
+      setActiveDraftState(false);
     }
   }, [conversation?.thread_id]);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!conversation) return;
+    if (draftThreadId !== conversation.thread_id) return;
+
+    saveDraft(conversation.thread_id, replyText);
+    setActiveDraftState(Boolean(replyText.trim()) || Boolean(selectedMedia));
+  }, [conversation?.thread_id, draftThreadId, replyText, selectedMedia]);
+
+  useEffect(() => {
+    return () => setActiveDraftState(false);
+  }, []);
 
   const loadMessages = async () => {
     if (!conversation) return;
-    
+
     setLoading(true);
     const data = await fetchMessages(conversation.thread_id);
     setMessages(data);
-    
-    // Get the latest AI reply for the input field
-    const aiReply = await getLatestAiReply(conversation.thread_id);
-    if (aiReply) {
-      setReplyText(aiReply);
+
+    const savedDraft = loadDraft(conversation.thread_id);
+    if (savedDraft) {
+      setReplyText(savedDraft);
     } else {
-      setReplyText('');
+      const aiReply = await getLatestAiReply(conversation.thread_id);
+      setReplyText(aiReply || '');
     }
-    
+
+    setDraftThreadId(conversation.thread_id);
     setLoading(false);
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImagePreview(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+
+    setSelectedMedia(file);
+    const reader = new FileReader();
+    reader.onload = (event) => setMediaPreview(event.target?.result as string);
+    reader.readAsDataURL(file);
   };
 
-  const removeImage = () => {
-    setSelectedImage(null);
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const removeMedia = () => {
+    setSelectedMedia(null);
+    setMediaPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSend = async () => {
-    if (!conversation || (!replyText.trim() && !selectedImage)) return;
+    if (!conversation || (!replyText.trim() && !selectedMedia)) return;
 
     setSending(true);
-    
+
     try {
       let agentImageUrl: string | null = null;
 
-      // Upload image if selected - convert to base64 and send directly
-      if (selectedImage) {
+      if (selectedMedia) {
         setUploadingImage(true);
-        
+
         try {
-          // Convert image to base64
-          const base64 = await new Promise<string>((resolve, reject) => {
+          agentImageUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result as string);
             reader.onerror = reject;
-            reader.readAsDataURL(selectedImage);
+            reader.readAsDataURL(selectedMedia);
           });
-          
-          // Use base64 directly as the image URL
-          agentImageUrl = base64;
         } catch (error) {
-          console.error('Error converting image:', error);
+          console.error('Error converting attachment:', error);
           toast({
             title: 'Error',
-            description: 'Failed to process image. Please try again.',
+            description: 'Failed to process attachment. Please try again.',
             variant: 'destructive',
           });
           setSending(false);
           setUploadingImage(false);
           return;
         }
-        
+
         setUploadingImage(false);
       }
 
-      // Get the latest message data to use as base
       const latestMessage = messages[messages.length - 1];
-      
-      // Determine webhook URL based on channel
       const channel = conversation.channel.toLowerCase();
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
-      // Prepare the payload
       const payload: Record<string, string | null | undefined> = {
         id: latestMessage?.id || crypto.randomUUID(),
         channel: conversation.channel,
@@ -140,57 +144,40 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         uploaded_at: new Date().toISOString(),
       };
 
-      // Add image URL if present
-      if (agentImageUrl) {
-        payload.agent_image_url = agentImageUrl;
-      }
+      if (agentImageUrl) payload.agent_image_url = agentImageUrl;
 
-      // Find eBay IDs from the last inbound message only
       if (channel === 'ebay') {
-        const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
-        
+        const lastInbound = [...messages].reverse().find((m) => m.direction === 'inbound');
+
         if (lastInbound?.message_id_ebay) {
-          // Extract plain string ID, ignoring any nested arrays from previous sends
           const raw = lastInbound.message_id_ebay;
           const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
-          if (cleanId) {
-            payload.message_id_ebay = cleanId;
-          }
+          if (cleanId) payload.message_id_ebay = cleanId;
         }
         if (lastInbound?.item_id_ebay) {
           const raw = lastInbound.item_id_ebay;
           const cleanId = typeof raw === 'string' && !raw.startsWith('[') ? raw : null;
-          if (cleanId) {
-            payload.item_id_ebay = cleanId;
-          }
+          if (cleanId) payload.item_id_ebay = cleanId;
         }
       }
 
-      // Send to webhook
       const response = await fetch(webhookUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
+      if (!response.ok) throw new Error('Failed to send message');
 
       toast({
         title: 'Sent!',
         description: 'Your reply has been sent successfully.',
       });
 
-      // Clear inputs
+      clearDraft(conversation.thread_id);
       setReplyText('');
-      removeImage();
-      
-      // Reload messages after a short delay
+      removeMedia();
       setTimeout(loadMessages, 1000);
-
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -220,19 +207,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
-      {/* Header */}
       <div className="flex items-center gap-2 p-3 md:p-4 border-b border-border bg-card">
         {onBack && (
           <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
-        
+
         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
           <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-muted flex items-center justify-center text-base md:text-lg shrink-0">
             {channelIcon}
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-sm md:text-base text-foreground truncate">
               {conversation.sender_name}
@@ -241,11 +227,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               <span className="truncate">{conversation.thread_id}</span>
             </div>
           </div>
-          
+
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <Badge className={cn('capitalize text-xs', badgeClass)}>
-              {conversation.channel}
-            </Badge>
+            <Badge className={cn('capitalize text-xs', badgeClass)}>{conversation.channel}</Badge>
             <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] md:max-w-none">
               to: {conversation.message_to}
             </span>
@@ -253,7 +237,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         </div>
       </div>
 
-      {/* Messages */}
       <ScrollArea className="flex-1 p-3 md:p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
@@ -273,18 +256,16 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         )}
       </ScrollArea>
 
-      {/* Input Area */}
       <div className="p-3 md:p-4 border-t border-border bg-card max-h-[60vh] flex flex-col">
-        {/* Image Preview */}
-        {imagePreview && (
+        {mediaPreview && (
           <div className="relative inline-block mb-3 shrink-0">
-            <img
-              src={imagePreview}
-              alt="Selected"
-              className="max-h-32 rounded-lg shadow-sm"
-            />
+            {selectedMedia?.type.startsWith('video/') ? (
+              <video src={mediaPreview} className="max-h-32 rounded-lg shadow-sm" controls />
+            ) : (
+              <img src={mediaPreview} alt="Selected" className="max-h-32 rounded-lg shadow-sm" />
+            )}
             <button
-              onClick={removeImage}
+              onClick={removeMedia}
               className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -296,26 +277,27 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             )}
           </div>
         )}
-        
+
         <div className="flex items-end gap-2 min-h-0">
           <input
             type="file"
             ref={fileInputRef}
-            onChange={handleImageSelect}
-            accept="image/*"
+            onChange={handleMediaSelect}
+            accept="image/*,video/*"
             className="hidden"
           />
-          
+
           <Button
             variant="ghost"
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={sending}
             className="shrink-0 mb-0.5"
+            title="Attach image or video"
           >
             <ImagePlus className="w-5 h-5" />
           </Button>
-          
+
           <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
             <Textarea
               value={replyText}
@@ -329,25 +311,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               rows={1}
             />
           </div>
-          
-          <Button
-            onClick={handleSend}
-            disabled={sending || (!replyText.trim() && !selectedImage)}
-            className="shrink-0 mb-0.5"
-          >
-            {sending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+
+          <Button onClick={handleSend} disabled={sending || (!replyText.trim() && !selectedMedia)} className="shrink-0 mb-0.5">
+            {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </Button>
         </div>
-        
-        {replyText && (
-          <p className="text-xs text-muted-foreground mt-2">
-            💡 AI suggested reply loaded. Edit if needed, then press send.
-          </p>
-        )}
+
+        {replyText && <p className="text-xs text-muted-foreground mt-2">Reply draft is saved locally until you send it.</p>}
       </div>
     </div>
   );
