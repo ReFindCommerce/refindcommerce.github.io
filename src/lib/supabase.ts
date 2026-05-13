@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox';
+import { formatSuggestedReply } from '@/lib/textFormat';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -237,7 +238,7 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
   if (!best?.ai_reply) return null;
 
   return {
-    reply: best.ai_reply,
+    reply: formatSuggestedReply(best.ai_reply),
     confidence: typeof best.ai_confidence === 'number'
       ? best.ai_confidence
       : estimateLegacyDraftConfidence(best.user_message, rows),
