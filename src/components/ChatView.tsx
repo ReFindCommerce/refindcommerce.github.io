@@ -363,6 +363,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const latestInboundText = cleanMessageText(latestInboundMessage?.user_message);
   const showTranslationTools = Boolean(latestInboundText);
   const inferredContact = extractContactInfo(latestInboundMessage?.user_message);
+  const showAiConfidence = Boolean(replyText.trim()) && !draftIsUserEdited;
   const confidenceLabel = getConfidenceLabel(aiConfidence);
   const confidenceClass = getConfidenceClass(aiConfidence);
 
@@ -463,7 +464,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
-            {aiConfidence !== null && (
+            {showAiConfidence && (
               <span
                 className={cn(
                   'inline-flex items-center gap-1 rounded-md border px-2 py-1 font-medium',
@@ -472,7 +473,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 title={aiConfidenceReason || 'Confidence is based on approved knowledge matches and thread context.'}
               >
                 <Gauge className="h-3.5 w-3.5" />
-                AI confidence: {aiConfidence}% {confidenceLabel}
+                AI confidence: {aiConfidence !== null ? `${aiConfidence}% ${confidenceLabel}` : 'pending'}
               </span>
             )}
             {(inferredContact.email || inferredContact.phone) && (
