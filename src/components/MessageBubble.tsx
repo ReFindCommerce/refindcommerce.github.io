@@ -3,7 +3,7 @@ import { Message } from '@/types/inbox';
 import { formatTime } from '@/lib/channelUtils';
 import { cn } from '@/lib/utils';
 import { cleanMessageText } from '@/lib/textFormat';
-import { buildTranslateUrl, extractLinks, extractMediaAttachments, hasNonEnglishSignals } from '@/lib/messageParsing';
+import { buildTranslateUrl, extractLinks, extractMediaAttachments } from '@/lib/messageParsing';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ExternalLink, Languages, Paperclip, X } from 'lucide-react';
 
@@ -21,7 +21,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const content = cleanMessageText(rawContent);
   const attachments = extractMediaAttachments(message);
   const inlineLinks = extractLinks(rawContent).filter((link) => !attachments.some((attachment) => attachment.url === link));
-  const needsTranslation = !isOutbound && hasNonEnglishSignals(content);
+  const needsTranslation = !isOutbound && Boolean(content);
 
   if (!content && attachments.length === 0) return null;
 
