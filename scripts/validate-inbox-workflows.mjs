@@ -289,6 +289,45 @@ function validateAiSameLanguageRule(workflow) {
   }
 }
 
+function validateAiAttachmentContext(workflow) {
+  if (workflow.name === 'ReFind Inbox - Push Notifications') {
+    return;
+  }
+
+  const workflowText = stringify(workflow.nodes);
+  const draftsAiReplies = workflowText.includes('ai_reply') || workflowText.includes('AI Agent');
+  if (!draftsAiReplies) {
+    return;
+  }
+
+  const aiPromptNodes = (workflow.nodes || []).filter((node) => {
+    const code = String(node.parameters?.jsCode || '');
+    return node.type === 'n8n-nodes-base.code' && /Build .*AI prompt/i.test(node.name);
+  });
+
+  for (const node of aiPromptNodes) {
+    const code = String(node.parameters?.jsCode || '');
+    if (!code.includes('ATTACHMENT CONTEXT')) {
+      addFailure(`${workflow.name} / ${node.name} must include attachment context in the AI prompt.`);
+    }
+    if (!/Do not say you did not receive|Do not say you.*cannot see an attachment/i.test(code)) {
+      addFailure(`${workflow.name} / ${node.name} must prevent AI drafts from asking customers to resend known attachments.`);
+    }
+    if (!code.includes('customer_image_url') || !code.includes('image_url') || !code.includes('ebay_image')) {
+      addFailure(`${workflow.name} / ${node.name} must pass known image fields into the AI prompt context.`);
+    }
+  }
+
+  for (const node of workflow.nodes || []) {
+    if (node.type !== 'n8n-nodes-base.postgres' || !/conversation history/i.test(node.name)) continue;
+
+    const query = String(node.parameters?.query || '');
+    if (!query.includes('customer_image_url') || !query.includes('image_url') || !query.includes('ebay_image')) {
+      addFailure(`${workflow.name} / ${node.name} must include image fields in conversation history for AI context.`);
+    }
+  }
+}
+
 const list = await n8n('/workflows?limit=100');
 const workflows = new Map(list.data.map((workflow) => [workflow.name, workflow]));
 
@@ -314,6 +353,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateGmailInboundAttachments(workflow);
   validateAiConfidenceFields(workflow);
   validateAiSameLanguageRule(workflow);
+  validateAiAttachmentContext(workflow);
 
   if (name === GMAIL_WORKFLOW) {
     validateGmailSendWorkflow(workflow);
