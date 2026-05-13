@@ -15,11 +15,13 @@ import { cn } from '@/lib/utils';
 import { normalizeCompactText, normalizeSearchText } from '@/lib/textFormat';
 
 interface ConversationListProps {
-  selectedThreadId: string | null;
+  selectedConversationKey: string | null;
   onSelectConversation: (conversation: Conversation) => void;
 }
 
-export function ConversationList({ selectedThreadId, onSelectConversation }: ConversationListProps) {
+const ANSWERED_ARCHIVE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
+export function ConversationList({ selectedConversationKey, onSelectConversation }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,13 +126,19 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
     }
   };
 
-  const visibleConversations = hideMode 
-    ? conversations 
-    : conversations.filter(conv => !isHidden(conv.thread_id));
+  const query = normalizeSearchText(searchQuery);
+  const compactQuery = normalizeCompactText(searchQuery);
+  const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
+  const hasSearch = Boolean(searchQuery.trim());
+  const shouldIncludeArchived = hideMode || hasSearch || hasActiveFilters;
+  const baseConversations = shouldIncludeArchived
+    ? conversations
+    : conversations.filter((conv) => !isStaleAnsweredConversation(conv));
+  const visibleConversations = hideMode
+    ? baseConversations
+    : baseConversations.filter(conv => !isHidden(conv.thread_id));
 
   const filteredConversations = visibleConversations.filter((conv) => {
-    const query = normalizeSearchText(searchQuery);
-    const compactQuery = normalizeCompactText(searchQuery);
     if (!query) return true;
 
     const searchable = normalizeSearchText([
@@ -150,9 +158,6 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
       (!!compactQuery && compactSearchable.includes(compactQuery))
     );
   });
-
-  const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
-  const hasSearch = Boolean(searchQuery.trim());
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
@@ -274,7 +279,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
         ) : (
           <div className="py-2 pr-2">
             {filteredConversations.map((conversation) => (
-              <div key={conversation.thread_id} className="relative">
+              <div key={conversation.conversation_key} className="relative">
                 {hideMode && (
                   <div 
                     className="absolute left-4 top-1/2 -translate-y-1/2 z-10"
@@ -298,7 +303,7 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
                 <div className={cn(hideMode && "ml-8")}>
                   <ConversationItem
                     conversation={conversation}
-                    isSelected={selectedThreadId === conversation.thread_id}
+                    isSelected={selectedConversationKey === conversation.conversation_key}
                     onClick={() => !hideMode && onSelectConversation(conversation)}
                   />
                 </div>
@@ -309,4 +314,13 @@ export function ConversationList({ selectedThreadId, onSelectConversation }: Con
       </ScrollArea>
     </div>
   );
+}
+
+function isStaleAnsweredConversation(conversation: Conversation): boolean {
+  if (conversation.status !== 'answered') return false;
+
+  const lastMessageTime = new Date(conversation.last_message_time).getTime();
+  if (!Number.isFinite(lastMessageTime)) return false;
+
+  return Date.now() - lastMessageTime > ANSWERED_ARCHIVE_AFTER_MS;
 }
