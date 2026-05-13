@@ -1,3 +1,5 @@
+import { formatSuggestedReply } from '@/lib/textFormat';
+
 const DRAFT_PREFIX = 'refind-inbox-draft:';
 const ACTIVE_DRAFT_EVENT = 'refind-active-draft-changed';
 
@@ -15,7 +17,7 @@ export function saveDraft(threadId: string, value: string): void {
 }
 
 export function loadDraft(threadId: string): string {
-  return localStorage.getItem(getDraftKey(threadId)) || '';
+  return formatSuggestedReply(localStorage.getItem(getDraftKey(threadId)) || '');
 }
 
 export function clearDraft(threadId: string): void {
