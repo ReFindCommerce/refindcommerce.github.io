@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { clearDraft, loadDraft, saveDraft, setActiveDraftState } from '@/lib/draftState';
+import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/lib/draftState';
 import { buildTranslateUrl, extractContactInfo, hasNonEnglishSignals } from '@/lib/messageParsing';
 import { cleanMessageText } from '@/lib/textFormat';
 
@@ -25,6 +25,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [replyText, setReplyText] = useState('');
   const [aiConfidence, setAiConfidence] = useState<number | null>(null);
   const [aiConfidenceReason, setAiConfidenceReason] = useState<string | null>(null);
+  const [draftIsUserEdited, setDraftIsUserEdited] = useState(false);
   const [draftThreadId, setDraftThreadId] = useState<string | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       setDraftThreadId(null);
       setSelectedMedia(null);
       setMediaPreview(null);
+      setDraftIsUserEdited(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -53,6 +55,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       setReplyText('');
       setAiConfidence(null);
       setAiConfidenceReason(null);
+      setDraftIsUserEdited(false);
       setActiveDraftState(false);
     }
   }, [conversationKey]);
@@ -69,9 +72,11 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     if (!conversation) return;
     if (draftThreadId !== conversation.conversation_key) return;
 
-    saveDraft(conversation.conversation_key, replyText);
+    if (draftIsUserEdited) {
+      saveDraft(conversation.conversation_key, replyText);
+    }
     setActiveDraftState(Boolean(replyText.trim()) || Boolean(selectedMedia));
-  }, [conversationKey, draftThreadId, replyText, selectedMedia]);
+  }, [conversationKey, draftThreadId, draftIsUserEdited, replyText, selectedMedia]);
 
   useEffect(() => {
     return () => {
@@ -85,27 +90,35 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     
     setLoading(true);
     try {
-      const data = await fetchMessages(conversation.thread_id, gmailMessageTo);
+      const [data, aiDraft] = await Promise.all([
+        fetchMessages(conversation.thread_id, gmailMessageTo),
+        getLatestAiDraft(conversation.thread_id, gmailMessageTo),
+      ]);
       setMessages(data);
       
-      const savedDraft = loadDraft(conversation.conversation_key);
+      const savedDraft = loadDraftState(conversation.conversation_key);
 
-      if (savedDraft) {
-        setReplyText(savedDraft);
+      if (savedDraft.value && !savedDraft.isLegacy) {
+        setReplyText(savedDraft.value);
         setAiConfidence(null);
         setAiConfidenceReason(null);
+        setDraftIsUserEdited(true);
+      } else if (aiDraft) {
+        clearDraft(conversation.conversation_key);
+        setReplyText(aiDraft.reply);
+        setAiConfidence(aiDraft.confidence);
+        setAiConfidenceReason(aiDraft.confidenceReason);
+        setDraftIsUserEdited(false);
+      } else if (savedDraft.value) {
+        setReplyText(savedDraft.value);
+        setAiConfidence(null);
+        setAiConfidenceReason(null);
+        setDraftIsUserEdited(false);
       } else {
-        // Get the latest AI reply for the input field
-        const aiDraft = await getLatestAiDraft(conversation.thread_id, gmailMessageTo);
-        if (aiDraft) {
-          setReplyText(aiDraft.reply);
-          setAiConfidence(aiDraft.confidence);
-          setAiConfidenceReason(aiDraft.confidenceReason);
-        } else {
-          setReplyText('');
-          setAiConfidence(null);
-          setAiConfidenceReason(null);
-        }
+        setReplyText('');
+        setAiConfidence(null);
+        setAiConfidenceReason(null);
+        setDraftIsUserEdited(false);
       }
 
       setDraftThreadId(conversation.conversation_key);
@@ -156,6 +169,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setDraftIsUserEdited(true);
       setSelectedMedia(file);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -313,6 +327,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       setReplyText('');
       setAiConfidence(null);
       setAiConfidenceReason(null);
+      setDraftIsUserEdited(false);
       removeMedia();
       
       // Reload messages after a short delay
@@ -524,6 +539,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 setReplyText(e.target.value);
                 setAiConfidence(null);
                 setAiConfidenceReason(null);
+                setDraftIsUserEdited(true);
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.35) + 'px';
               }}
