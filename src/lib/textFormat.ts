@@ -62,6 +62,23 @@ export function cleanMessageText(value: string | null | undefined): string {
     .trim();
 }
 
+export function formatSuggestedReply(value: string | null | undefined): string {
+  const text = cleanMessageText(value);
+  if (!text) return '';
+  if (text.includes('\n\n')) return text;
+
+  return text
+    .replace(/\s+(https?:\/\/\S+)/g, '\n$1')
+    .replace(/^(Hello|Hi|Dear)([^,\n]*),\s+/i, '$1$2,\n\n')
+    .replace(/\s+(If you need|If you have|If there is|If there are|Thank you for|I apologise|I apologize|Please let me know|We will|You can|You can find)\b/g, '\n\n$1')
+    .replace(/\s+(Best wishes|Best regards|Kind regards|Many thanks|Thanks),\s*/i, '\n\n$1,\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+    .trim();
+}
+
 export function normalizeSearchText(value: string | null | undefined): string {
   return cleanMessageText(value)
     .toLowerCase()
