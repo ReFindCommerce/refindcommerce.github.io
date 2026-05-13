@@ -93,6 +93,13 @@ function validateNoFragileWebhookReferences(workflow) {
   if (workflowJson.includes('Webhook.item')) {
     addFailure(`${workflow.name} contains fragile Webhook.item references.`);
   }
+
+  for (const node of workflow.nodes || []) {
+    if (node.type === 'n8n-nodes-base.code') continue;
+    if (stringify(node.parameters).includes('current.text')) {
+      addFailure(`${workflow.name} / ${node.name} contains a prompt expression that references current.text outside a code node.`);
+    }
+  }
 }
 
 function validateWebhookPaths(workflow) {
