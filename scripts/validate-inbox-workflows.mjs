@@ -190,8 +190,16 @@ function validateGmailInboundAttachments(workflow) {
           addFailure(`${workflow.name} / ${node.name} is missing allowed Gmail recipient ${recipient}.`);
         }
       }
+      if (!code.includes('disallowedRecipients')) {
+        addFailure(`${workflow.name} / ${node.name} must explicitly reject personal Gmail recipients.`);
+      }
       if (!code.includes('hasAllowedRecipient')) {
         addFailure(`${workflow.name} / ${node.name} must drop Gmail messages for non-inbox recipients before AI/Supabase.`);
+      }
+      const recipientGuardIndex = code.indexOf('if (!hasAllowedRecipient(to, item)) continue;');
+      const attachmentExtractionIndex = code.indexOf('extractAttachmentUrls.call');
+      if (recipientGuardIndex === -1 || attachmentExtractionIndex === -1 || recipientGuardIndex > attachmentExtractionIndex) {
+        addFailure(`${workflow.name} / ${node.name} must apply the Gmail recipient guard before attachment extraction.`);
       }
     }
 
