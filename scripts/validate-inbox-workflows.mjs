@@ -343,6 +343,17 @@ function validateAiPromptSyntax(workflow) {
     } catch (error) {
       addFailure(`${workflow.name} / ${node.name} contains invalid JavaScript: ${error.message}`);
     }
+
+    const isGmailPrompt = workflow.name.toLowerCase().includes('gmail') || workflow.name.toLowerCase().includes('gmai');
+    if (!isGmailPrompt) continue;
+
+    if (!code.includes('$input.all()') || !code.includes('currentItems') || !code.includes('return output;')) {
+      addFailure(`${workflow.name} / ${node.name} must preserve every Gmail trigger item instead of collapsing to the first message.`);
+    }
+
+    if (code.includes('.first().json') || code.includes('$input.first()')) {
+      addFailure(`${workflow.name} / ${node.name} must not use first-item helpers in Gmail AI prompt builders.`);
+    }
   }
 }
 
@@ -367,13 +378,13 @@ function validateEasyTagGmailBranchReferences(workflow) {
     {
       nodeName: 'Build Gmail Tom AI prompt',
       source: 'jsCode',
-      required: "$('Edit Fields').first().json",
+      required: "$('Edit Fields').all()",
       disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
     },
     {
       nodeName: 'Build Gmail Tom AI prompt2',
       source: 'jsCode',
-      required: "$('Edit Fields1').first().json",
+      required: "$('Edit Fields1').all()",
       disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
     },
     {
