@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/lib/draftState';
-import { buildTranslateUrl, extractContactInfo, hasNonEnglishSignals } from '@/lib/messageParsing';
+import { buildTranslateUrl, extractContactInfo } from '@/lib/messageParsing';
 import { cleanMessageText } from '@/lib/textFormat';
 
 interface ChatViewProps {
@@ -361,7 +361,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const badgeClass = getChannelBadgeClass(conversation.channel);
   const latestInboundMessage = [...messages].reverse().find((message) => message.direction === 'inbound');
   const latestInboundText = cleanMessageText(latestInboundMessage?.user_message);
-  const showTranslationTools = hasNonEnglishSignals(latestInboundText);
+  const showTranslationTools = Boolean(latestInboundText);
   const inferredContact = extractContactInfo(latestInboundMessage?.user_message);
   const confidenceLabel = getConfidenceLabel(aiConfidence);
   const confidenceClass = getConfidenceClass(aiConfidence);
