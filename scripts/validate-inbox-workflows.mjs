@@ -254,6 +254,41 @@ function validateAiConfidenceFields(workflow) {
   }
 }
 
+function validateAiSameLanguageRule(workflow) {
+  if (workflow.name === 'ReFind Inbox - Push Notifications') {
+    return;
+  }
+
+  const workflowText = stringify(workflow.nodes);
+  const draftsAiReplies = workflowText.includes('ai_reply') || workflowText.includes('AI Agent');
+  if (!draftsAiReplies) {
+    return;
+  }
+
+  if (!/same language|LANGUAGE RULE/i.test(workflowText)) {
+    addFailure(`${workflow.name} must instruct AI replies to use the same language as the latest customer message.`);
+  }
+
+  const aiPromptNodes = (workflow.nodes || []).filter((node) => {
+    const code = String(node.parameters?.jsCode || '');
+    return node.type === 'n8n-nodes-base.code' && (/Build .*AI prompt/i.test(node.name) || code.includes('LATEST CUSTOMER MESSAGE'));
+  });
+
+  for (const node of aiPromptNodes) {
+    const code = String(node.parameters?.jsCode || '');
+    if (!/same language|LANGUAGE RULE/i.test(code)) {
+      addFailure(`${workflow.name} / ${node.name} must include the same-language AI reply rule.`);
+    }
+  }
+
+  const aiAgentNodes = (workflow.nodes || []).filter((node) => node.name?.startsWith('AI Agent'));
+  for (const node of aiAgentNodes) {
+    if (!/same language/i.test(stringify(node.parameters))) {
+      addFailure(`${workflow.name} / ${node.name} must include the same-language AI reply rule.`);
+    }
+  }
+}
+
 const list = await n8n('/workflows?limit=100');
 const workflows = new Map(list.data.map((workflow) => [workflow.name, workflow]));
 
@@ -278,6 +313,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateWebhookPaths(workflow);
   validateGmailInboundAttachments(workflow);
   validateAiConfidenceFields(workflow);
+  validateAiSameLanguageRule(workflow);
 
   if (name === GMAIL_WORKFLOW) {
     validateGmailSendWorkflow(workflow);
