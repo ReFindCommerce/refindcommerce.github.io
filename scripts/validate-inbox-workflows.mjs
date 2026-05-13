@@ -143,6 +143,43 @@ function validateGmailSendWorkflow(workflow) {
   }
 }
 
+function validateGmailInboundAttachments(workflow) {
+  if (!workflow.name.toLowerCase().includes('gmail') && !workflow.name.toLowerCase().includes('gmai')) {
+    return;
+  }
+
+  const getMessage = (workflow.nodes || []).find((node) => node.name === 'Get a message');
+  if (!getMessage) {
+    addFailure(`${workflow.name} is missing Gmail Get a message node.`);
+  } else {
+    if (getMessage.parameters?.options?.downloadAttachments !== true) {
+      addFailure(`${workflow.name} / Get a message must download attachments.`);
+    }
+    if (getMessage.parameters?.options?.dataPropertyAttachmentsPrefixName !== 'attachment_') {
+      addFailure(`${workflow.name} / Get a message must use attachment_ as the attachment binary prefix.`);
+    }
+  }
+
+  for (const node of workflow.nodes || []) {
+    if (node.type !== 'n8n-nodes-base.supabase') continue;
+
+    const fields = fieldValues(node);
+    const hasAiReply = fields.some((field) => field.fieldId === 'ai_reply');
+    if (!hasAiReply) continue;
+
+    const fieldIds = new Set(fields.map((field) => field.fieldId));
+    if (!fieldIds.has('customer_image_url')) {
+      addFailure(`${workflow.name} / ${node.name} must preserve the first Gmail media attachment.`);
+    }
+    if (!fieldIds.has('image_url')) {
+      addFailure(`${workflow.name} / ${node.name} must preserve the second Gmail media attachment.`);
+    }
+    if (!fieldIds.has('ebay_image')) {
+      addFailure(`${workflow.name} / ${node.name} must preserve the third Gmail media attachment.`);
+    }
+  }
+}
+
 function validateAiConfidenceFields(workflow) {
   for (const node of workflow.nodes || []) {
     if (node.type !== 'n8n-nodes-base.supabase') continue;
@@ -183,6 +220,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateStatusFields(workflow);
   validateNoFragileWebhookReferences(workflow);
   validateWebhookPaths(workflow);
+  validateGmailInboundAttachments(workflow);
   validateAiConfidenceFields(workflow);
 
   if (name === GMAIL_WORKFLOW) {
