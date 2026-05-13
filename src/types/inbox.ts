@@ -1,6 +1,6 @@
 export type Channel = 'whatsapp' | 'gmail' | 'amazon' | 'ebay' | 'tiktok shop';
 
-export type MessageStatus = 'new' | 'answered';
+export type MessageStatus = 'new' | 'answered' | 'sending' | 'sent' | 'send_failed';
 
 export type UserType = 'customer' | 'agent';
 
@@ -18,6 +18,8 @@ export interface Message {
   user_message: string | null;
   final_reply: string | null;
   ai_reply: string | null;
+  ai_confidence: number | null;
+  ai_confidence_reason: string | null;
   status: MessageStatus;
   uploaded_at: string;
   customer_image_url: string | null;
@@ -33,6 +35,7 @@ export interface Message {
 }
 
 export interface Conversation {
+  conversation_key: string;
   thread_id: string;
   sender_name: string;
   channel: Channel;
@@ -48,6 +51,20 @@ export interface FilterOptions {
   channels: Channel[];
   thread_ids: string[];
   message_to: string[];
+}
+
+export interface InboxFailure {
+  id: string;
+  created_at: string;
+  workflow_name: string | null;
+  execution_id: string | null;
+  node_name: string | null;
+  severity: string;
+  error_message: string | null;
+  message_from: string | null;
+  message_to: string | null;
+  subject: string | null;
+  status: 'unresolved' | 'retried' | 'ignored' | 'resolved';
 }
 
 export const CHANNEL_WEBHOOKS: Record<string, string> = {
