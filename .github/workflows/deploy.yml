@@ -15,6 +15,15 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Validate inbox workflows
+        env:
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+        run: |
+          if [ -n "$N8N_API_KEY" ]; then
+            npm run validate:inbox
+          else
+            echo "Skipping inbox workflow validation because N8N_API_KEY is not configured."
+          fi
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
