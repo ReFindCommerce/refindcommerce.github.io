@@ -316,6 +316,9 @@ function validateAiAttachmentContext(workflow) {
     if (!code.includes('customer_image_url') || !code.includes('image_url') || !code.includes('ebay_image')) {
       addFailure(`${workflow.name} / ${node.name} must pass known image fields into the AI prompt context.`);
     }
+    if (!code.includes('summarizeAttachmentValue') || !code.includes('/^data:/i')) {
+      addFailure(`${workflow.name} / ${node.name} must summarize data URL attachments instead of embedding base64 in the AI prompt.`);
+    }
   }
 
   for (const node of workflow.nodes || []) {
@@ -339,6 +342,85 @@ function validateAiPromptSyntax(workflow) {
       new Function(code);
     } catch (error) {
       addFailure(`${workflow.name} / ${node.name} contains invalid JavaScript: ${error.message}`);
+    }
+  }
+}
+
+function validateEasyTagGmailBranchReferences(workflow) {
+  if (workflow.name !== 'gmail - tom.pergam@easytag') {
+    return;
+  }
+
+  const expectedReferences = [
+    {
+      nodeName: 'Get Gmail Tom conversation history',
+      source: 'query',
+      required: "$('Edit Fields').item.json.from",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Get Gmail Tom conversation history2',
+      source: 'query',
+      required: "$('Edit Fields1').item.json.from",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Build Gmail Tom AI prompt',
+      source: 'jsCode',
+      required: "$('Edit Fields').first().json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Build Gmail Tom AI prompt2',
+      source: 'jsCode',
+      required: "$('Edit Fields1').first().json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Get Gmail Tom approved knowledge',
+      source: 'query',
+      required: "$('Edit Fields').item.json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Get Gmail Tom approved knowledge2',
+      source: 'query',
+      required: "$('Edit Fields1').item.json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Switch',
+      source: 'parameters',
+      required: "$('Build Gmail Tom AI prompt').item.json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+    {
+      nodeName: 'Switch2',
+      source: 'parameters',
+      required: "$('Build Gmail Tom AI prompt2').item.json",
+      disallowed: ["$('Code in JavaScript1')", "$('Code in JavaScript3')"],
+    },
+  ];
+
+  for (const check of expectedReferences) {
+    const node = (workflow.nodes || []).find((candidate) => candidate.name === check.nodeName);
+    if (!node) {
+      addFailure(`${workflow.name} is missing ${check.nodeName}.`);
+      continue;
+    }
+
+    const content =
+      check.source === 'parameters'
+        ? stringify(node.parameters)
+        : String(node.parameters?.[check.source] || '');
+    if (!content.includes(check.required)) {
+      addFailure(`${workflow.name} / ${check.nodeName} must read from the direct upstream ${check.required} branch.`);
+    }
+
+    for (const disallowed of check.disallowed) {
+      if (content.includes(disallowed)) {
+        addFailure(`${workflow.name} / ${check.nodeName} must not reference sibling branch ${disallowed}.`);
+      }
     }
   }
 }
@@ -370,6 +452,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateAiSameLanguageRule(workflow);
   validateAiAttachmentContext(workflow);
   validateAiPromptSyntax(workflow);
+  validateEasyTagGmailBranchReferences(workflow);
 
   if (name === GMAIL_WORKFLOW) {
     validateGmailSendWorkflow(workflow);
