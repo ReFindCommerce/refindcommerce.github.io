@@ -328,6 +328,21 @@ function validateAiAttachmentContext(workflow) {
   }
 }
 
+function validateAiPromptSyntax(workflow) {
+  const aiPromptNodes = (workflow.nodes || []).filter((node) => {
+    return node.type === 'n8n-nodes-base.code' && /Build .*AI prompt/i.test(node.name);
+  });
+
+  for (const node of aiPromptNodes) {
+    const code = String(node.parameters?.jsCode || '');
+    try {
+      new Function(code);
+    } catch (error) {
+      addFailure(`${workflow.name} / ${node.name} contains invalid JavaScript: ${error.message}`);
+    }
+  }
+}
+
 const list = await n8n('/workflows?limit=100');
 const workflows = new Map(list.data.map((workflow) => [workflow.name, workflow]));
 
@@ -354,6 +369,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateAiConfidenceFields(workflow);
   validateAiSameLanguageRule(workflow);
   validateAiAttachmentContext(workflow);
+  validateAiPromptSyntax(workflow);
 
   if (name === GMAIL_WORKFLOW) {
     validateGmailSendWorkflow(workflow);
