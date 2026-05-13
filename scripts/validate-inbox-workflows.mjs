@@ -136,6 +136,24 @@ function validateGmailSendWorkflow(workflow) {
   }
 }
 
+function validateAiConfidenceFields(workflow) {
+  for (const node of workflow.nodes || []) {
+    if (node.type !== 'n8n-nodes-base.supabase') continue;
+
+    const fields = fieldValues(node);
+    const hasAiReply = fields.some((field) => field.fieldId === 'ai_reply');
+    if (!hasAiReply) continue;
+
+    const fieldIds = new Set(fields.map((field) => field.fieldId));
+    if (!fieldIds.has('ai_confidence')) {
+      addFailure(`${workflow.name} / ${node.name} writes ai_reply without ai_confidence.`);
+    }
+    if (!fieldIds.has('ai_confidence_reason')) {
+      addFailure(`${workflow.name} / ${node.name} writes ai_reply without ai_confidence_reason.`);
+    }
+  }
+}
+
 const list = await n8n('/workflows?limit=100');
 const workflows = new Map(list.data.map((workflow) => [workflow.name, workflow]));
 
@@ -158,6 +176,7 @@ for (const name of REQUIRED_WORKFLOWS) {
   validateStatusFields(workflow);
   validateNoFragileWebhookReferences(workflow);
   validateWebhookPaths(workflow);
+  validateAiConfidenceFields(workflow);
 
   if (name === GMAIL_WORKFLOW) {
     validateGmailSendWorkflow(workflow);
