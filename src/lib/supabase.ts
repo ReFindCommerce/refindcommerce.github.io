@@ -238,8 +238,10 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
 
   return {
     reply: best.ai_reply,
-    confidence: typeof best.ai_confidence === 'number' ? best.ai_confidence : null,
-    confidenceReason: best.ai_confidence_reason || null,
+    confidence: typeof best.ai_confidence === 'number'
+      ? best.ai_confidence
+      : estimateLegacyDraftConfidence(best.user_message, rows),
+    confidenceReason: best.ai_confidence_reason || getLegacyDraftConfidenceReason(best.user_message),
   };
 }
 
@@ -261,6 +263,32 @@ function getDraftCandidateScore(message: string | null): number {
   }
 
   return Math.min(100, 10 + words.length);
+}
+
+function estimateLegacyDraftConfidence(message: string | null, rows: any[]): number {
+  const text = String(message || '').trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  const hasRecentContext = rows.some((row: any) => row.direction === 'inbound' && row.user_message && row.user_message !== message);
+
+  if (!text) return 35;
+  if (getDraftCandidateScore(text) <= 1) return hasRecentContext ? 55 : 40;
+  if (words.length >= 20) return hasRecentContext ? 70 : 65;
+  if (words.length >= 8) return hasRecentContext ? 65 : 60;
+  return hasRecentContext ? 55 : 50;
+}
+
+function getLegacyDraftConfidenceReason(message: string | null): string {
+  const text = String(message || '').trim();
+
+  if (!text) {
+    return 'estimated because this draft does not have stored workflow confidence';
+  }
+
+  if (getDraftCandidateScore(text) <= 1) {
+    return 'estimated from a low-information message because stored workflow confidence is missing';
+  }
+
+  return 'estimated from message specificity because stored workflow confidence is missing';
 }
 
 export async function getDistinctValues(column: 'channel' | 'thread_id' | 'message_to'): Promise<string[]> {
