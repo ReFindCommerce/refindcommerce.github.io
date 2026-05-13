@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
-import { fetchMessages, getLatestAiReply } from '@/lib/supabase';
+import { fetchMessages, getLatestAiDraft } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,6 +23,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [aiConfidenceReason, setAiConfidenceReason] = useState<string | null>(null);
   const [draftThreadId, setDraftThreadId] = useState<string | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -34,6 +36,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const scrollRetryTimersRef = useRef<number[]>([]);
   const { toast } = useToast();
   const latestMessageId = messages[messages.length - 1]?.id;
+  const conversationKey = conversation?.conversation_key || null;
+  const gmailMessageTo = conversation?.channel === 'gmail' ? conversation.message_to : undefined;
 
   useEffect(() => {
     if (conversation) {
@@ -45,9 +49,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       }
       loadMessages();
     } else {
+      setMessages([]);
+      setReplyText('');
+      setAiConfidence(null);
+      setAiConfidenceReason(null);
       setActiveDraftState(false);
     }
-  }, [conversation?.thread_id]);
+  }, [conversationKey]);
 
   useLayoutEffect(() => {
     if (!loading && messages.length > 0) {
@@ -55,15 +63,15 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     }
 
     return clearScrollRetries;
-  }, [loading, latestMessageId, conversation?.thread_id]);
+  }, [loading, latestMessageId, conversationKey]);
 
   useEffect(() => {
     if (!conversation) return;
-    if (draftThreadId !== conversation.thread_id) return;
+    if (draftThreadId !== conversation.conversation_key) return;
 
-    saveDraft(conversation.thread_id, replyText);
+    saveDraft(conversation.conversation_key, replyText);
     setActiveDraftState(Boolean(replyText.trim()) || Boolean(selectedMedia));
-  }, [conversation?.thread_id, draftThreadId, replyText, selectedMedia]);
+  }, [conversationKey, draftThreadId, replyText, selectedMedia]);
 
   useEffect(() => {
     return () => {
@@ -77,24 +85,30 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     
     setLoading(true);
     try {
-      const data = await fetchMessages(conversation.thread_id);
+      const data = await fetchMessages(conversation.thread_id, gmailMessageTo);
       setMessages(data);
       
-      const savedDraft = loadDraft(conversation.thread_id);
+      const savedDraft = loadDraft(conversation.conversation_key);
 
       if (savedDraft) {
         setReplyText(savedDraft);
+        setAiConfidence(null);
+        setAiConfidenceReason(null);
       } else {
         // Get the latest AI reply for the input field
-        const aiReply = await getLatestAiReply(conversation.thread_id);
-        if (aiReply) {
-          setReplyText(aiReply);
+        const aiDraft = await getLatestAiDraft(conversation.thread_id, gmailMessageTo);
+        if (aiDraft) {
+          setReplyText(aiDraft.reply);
+          setAiConfidence(aiDraft.confidence);
+          setAiConfidenceReason(aiDraft.confidenceReason);
         } else {
           setReplyText('');
+          setAiConfidence(null);
+          setAiConfidenceReason(null);
         }
       }
 
-      setDraftThreadId(conversation.thread_id);
+      setDraftThreadId(conversation.conversation_key);
     } catch (error) {
       console.error('Failed to load messages:', error);
       toast({
@@ -165,6 +179,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     setSending(true);
     
     try {
+      const trimmedReply = replyText.trim();
       let agentImageUrl: string | null = null;
 
       if (selectedMedia) {
@@ -195,8 +210,21 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       }
 
       // Get the latest message data to use as base
-      const latestMessage = messages[messages.length - 1];
       const lastInbound = [...messages].reverse().find(m => m.direction === 'inbound');
+
+      if (!lastInbound) {
+        throw new Error('No inbound customer message found for this conversation.');
+      }
+
+      if (
+        !conversation.thread_id ||
+        conversation.thread_id === 'unknown-thread' ||
+        !conversation.message_from ||
+        conversation.message_from === 'unknown-customer'
+      ) {
+        throw new Error('This conversation is missing the identifiers needed to send a reply.');
+      }
+
       const gmailMessageId = lastInbound?.gmail_message_id || lastInbound?.message_id_ebay || undefined;
       const gmailThreadId = lastInbound?.gmail_thread_id || conversation.thread_id;
       const recentHistory = messages.slice(-12).map((message) => ({
@@ -212,7 +240,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
       // Prepare the payload
       const payload: Record<string, string | null | undefined> = {
-        id: latestMessage?.id || crypto.randomUUID(),
+        id: crypto.randomUUID(),
         channel: conversation.channel,
         thread_id: conversation.thread_id,
         message_from: conversation.message_from,
@@ -221,7 +249,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         user_type: 'agent',
         direction: 'outbound',
         status: 'answered',
-        final_reply: replyText.trim() || null,
+        final_reply: trimmedReply || null,
         uploaded_at: new Date().toISOString(),
         reply_mode: channel === 'gmail' ? 'thread_reply' : 'channel_reply',
         email_thread_id: channel === 'gmail' ? gmailThreadId : undefined,
@@ -281,8 +309,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       });
 
       // Clear inputs
-      clearDraft(conversation.thread_id);
+      clearDraft(conversation.conversation_key);
       setReplyText('');
+      setAiConfidence(null);
+      setAiConfidenceReason(null);
       removeMedia();
       
       // Reload messages after a short delay
@@ -318,6 +348,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const latestInboundText = cleanMessageText(latestInboundMessage?.user_message);
   const showTranslationTools = hasNonEnglishSignals(latestInboundText);
   const inferredContact = extractContactInfo(latestInboundMessage?.user_message);
+  const confidenceLabel = getConfidenceLabel(aiConfidence);
+  const confidenceClass = getConfidenceClass(aiConfidence);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
@@ -416,6 +448,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
+            {aiConfidence !== null && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md border px-2 py-1 font-medium',
+                  confidenceClass
+                )}
+                title={aiConfidenceReason || 'Confidence is based on approved knowledge matches and thread context.'}
+              >
+                <Gauge className="h-3.5 w-3.5" />
+                AI confidence: {aiConfidence}% {confidenceLabel}
+              </span>
+            )}
             {(inferredContact.email || inferredContact.phone) && (
               <span className="rounded-md bg-muted px-2 py-1">
                 Detected contact: {inferredContact.email || inferredContact.phone}
@@ -478,6 +522,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               value={replyText}
               onChange={(e) => {
                 setReplyText(e.target.value);
+                setAiConfidence(null);
+                setAiConfidenceReason(null);
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, window.innerHeight * 0.35) + 'px';
               }}
@@ -508,4 +554,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
     </div>
   );
+}
+
+function getConfidenceLabel(confidence: number | null): string {
+  if (confidence === null) return '';
+  if (confidence >= 85) return 'high';
+  if (confidence >= 65) return 'medium';
+  return 'low';
+}
+
+function getConfidenceClass(confidence: number | null): string {
+  if (confidence === null) return 'text-muted-foreground';
+  if (confidence >= 85) return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (confidence >= 65) return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-destructive/30 bg-destructive/10 text-destructive';
 }
