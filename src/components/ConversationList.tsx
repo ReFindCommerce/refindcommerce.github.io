@@ -19,6 +19,7 @@ interface ConversationListProps {
   onSelectConversation: (conversation: Conversation) => void;
 }
 
+const CONVERSATION_ARCHIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const ANSWERED_ARCHIVE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
 export function ConversationList({ selectedConversationKey, onSelectConversation }: ConversationListProps) {
@@ -133,7 +134,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
   const shouldIncludeArchived = hideMode || hasSearch || hasActiveFilters;
   const baseConversations = shouldIncludeArchived
     ? conversations
-    : conversations.filter((conv) => !isStaleAnsweredConversation(conv));
+    : conversations.filter((conv) => !isArchivedDefaultConversation(conv));
   const visibleConversations = hideMode
     ? baseConversations
     : baseConversations.filter(conv => !isHidden(conv.thread_id));
@@ -316,11 +317,12 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
   );
 }
 
-function isStaleAnsweredConversation(conversation: Conversation): boolean {
-  if (conversation.status !== 'answered') return false;
-
+function isArchivedDefaultConversation(conversation: Conversation): boolean {
   const lastMessageTime = new Date(conversation.last_message_time).getTime();
   if (!Number.isFinite(lastMessageTime)) return false;
 
-  return Date.now() - lastMessageTime > ANSWERED_ARCHIVE_AFTER_MS;
+  const age = Date.now() - lastMessageTime;
+  if (age > CONVERSATION_ARCHIVE_AFTER_MS) return true;
+
+  return conversation.status === 'answered' && age > ANSWERED_ARCHIVE_AFTER_MS;
 }
