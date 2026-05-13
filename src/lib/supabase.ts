@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Message, Conversation, Channel } from '@/types/inbox';
+import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const TABLE_NAME = 'inbox_messages';
+const FAILURES_TABLE_NAME = 'inbox_failures';
 const MESSAGE_SELECT = [
   'id',
   'channel',
@@ -19,6 +20,8 @@ const MESSAGE_SELECT = [
   'user_message',
   'final_reply',
   'ai_reply',
+  'ai_confidence',
+  'ai_confidence_reason',
   'status',
   'uploaded_at',
   'customer_image_url',
@@ -33,12 +36,29 @@ const MESSAGE_SELECT = [
   'subject_ebay_message',
 ].join(',');
 
-export async function fetchMessages(threadId: string): Promise<Message[]> {
-  const { data, error } = await supabase
+function getConversationKey(message: Pick<Message, 'channel' | 'thread_id' | 'message_to'>): string {
+  const threadId = message.thread_id || 'unknown-thread';
+  const channel = String(message.channel || 'unknown-channel').toLowerCase();
+  const messageTo = String(message.message_to || 'unknown-recipient').trim().toLowerCase();
+
+  if (channel === 'gmail') {
+    return `${channel}:${threadId}:${messageTo}`;
+  }
+
+  return `${channel}:${threadId}`;
+}
+
+export async function fetchMessages(threadId: string, messageTo?: string): Promise<Message[]> {
+  let query = supabase
     .from(TABLE_NAME)
     .select(MESSAGE_SELECT)
-    .eq('thread_id', threadId)
-    .order('uploaded_at', { ascending: true });
+    .eq('thread_id', threadId);
+
+  if (messageTo) {
+    query = query.eq('message_to', messageTo);
+  }
+
+  const { data, error } = await query.order('uploaded_at', { ascending: true });
 
   if (error) {
     console.error('Error fetching messages:', error);
@@ -100,14 +120,16 @@ export async function fetchConversations(filters?: {
     throw error;
   }
 
-  // Group messages by thread_id
+  // Group email by recipient too, otherwise the same sender can merge multiple inboxes.
   const conversationMap = new Map<string, Conversation>();
 
   (data || []).forEach((msg: Message) => {
-    const existing = conversationMap.get(msg.thread_id);
+    const conversationKey = getConversationKey(msg);
+    const existing = conversationMap.get(conversationKey);
     
     if (!existing) {
-      conversationMap.set(msg.thread_id, {
+      conversationMap.set(conversationKey, {
+        conversation_key: conversationKey,
         thread_id: msg.thread_id,
         sender_name: msg.sender_name || msg.message_from || msg.thread_id,
         channel: msg.channel,
@@ -167,22 +189,78 @@ export async function uploadImage(file: File): Promise<string | null> {
   return urlData.publicUrl;
 }
 
-export async function getLatestAiReply(threadId: string): Promise<string | null> {
-  const { data, error } = await supabase
+export interface AiDraft {
+  reply: string;
+  confidence: number | null;
+  confidenceReason: string | null;
+}
+
+export async function getLatestAiDraft(threadId: string, messageTo?: string): Promise<AiDraft | null> {
+  let query = supabase
     .from(TABLE_NAME)
-    .select('ai_reply')
-    .eq('thread_id', threadId)
-    .not('ai_reply', 'is', null)
+    .select('ai_reply,ai_confidence,ai_confidence_reason,user_message,final_reply,direction,uploaded_at')
+    .eq('thread_id', threadId);
+
+  if (messageTo) {
+    query = query.eq('message_to', messageTo);
+  }
+
+  const { data, error } = await query
     .order('uploaded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
 
   if (error) {
     console.error('Error fetching AI reply:', error);
     return null;
   }
 
-  return data?.ai_reply || null;
+  const rows = data || [];
+  const latestOutbound = rows.find((message: any) => message.direction === 'outbound');
+  const latestOutboundTime = latestOutbound ? new Date(latestOutbound.uploaded_at).getTime() : 0;
+  const unresolvedInbound = rows.filter((message: any) => {
+    if (message.direction !== 'inbound') return false;
+    if (!message.ai_reply) return false;
+    return new Date(message.uploaded_at).getTime() >= latestOutboundTime;
+  });
+  const candidates = unresolvedInbound.length > 0
+    ? unresolvedInbound
+    : rows.filter((message: any) => message.direction === 'inbound' && message.ai_reply);
+
+  if (candidates.length === 0) return null;
+
+  const [best] = [...candidates].sort((a: any, b: any) => {
+    const scoreDiff = getDraftCandidateScore(b.user_message) - getDraftCandidateScore(a.user_message);
+    if (scoreDiff !== 0) return scoreDiff;
+    return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
+  });
+
+  if (!best?.ai_reply) return null;
+
+  return {
+    reply: best.ai_reply,
+    confidence: typeof best.ai_confidence === 'number' ? best.ai_confidence : null,
+    confidenceReason: best.ai_confidence_reason || null,
+  };
+}
+
+export async function getLatestAiReply(threadId: string, messageTo?: string): Promise<string | null> {
+  const draft = await getLatestAiDraft(threadId, messageTo);
+  return draft?.reply || null;
+}
+
+function getDraftCandidateScore(message: string | null): number {
+  const text = String(message || '').trim();
+  if (!text) return 0;
+
+  const words = text.split(/\s+/).filter(Boolean);
+  const genericHelpRequest = /^(hi|hello|hey|thanks|thank you|ok|okay|i have (a )?few questions\.? can you help\??|can you help\??)$/i;
+  const asksForHelpOnly = /^(i have (a )?few questions|can you help|please help)$/i;
+
+  if (genericHelpRequest.test(text) || (words.length <= 8 && asksForHelpOnly.test(text))) {
+    return 1;
+  }
+
+  return Math.min(100, 10 + words.length);
 }
 
 export async function getDistinctValues(column: 'channel' | 'thread_id' | 'message_to'): Promise<string[]> {
@@ -197,6 +275,56 @@ export async function getDistinctValues(column: 'channel' | 'thread_id' | 'messa
 
   const uniqueValues = [...new Set((data || []).map(item => item[column]).filter(Boolean))];
   return uniqueValues;
+}
+
+export interface ReliabilityStatus {
+  failures: InboxFailure[];
+  pendingSends: Message[];
+  failedSends: Message[];
+}
+
+export async function fetchReliabilityStatus(): Promise<ReliabilityStatus> {
+  const [failuresResult, sendIssuesResult] = await Promise.all([
+    supabase
+      .from(FAILURES_TABLE_NAME)
+      .select([
+        'id',
+        'created_at',
+        'workflow_name',
+        'execution_id',
+        'node_name',
+        'severity',
+        'error_message',
+        'message_from',
+        'message_to',
+        'subject',
+        'status',
+      ].join(','))
+      .order('created_at', { ascending: false })
+      .limit(25),
+    supabase
+      .from(TABLE_NAME)
+      .select(MESSAGE_SELECT)
+      .in('status', ['sending', 'send_failed'])
+      .order('uploaded_at', { ascending: false })
+      .limit(25),
+  ]);
+
+  if (failuresResult.error) {
+    console.error('Error fetching inbox failures:', failuresResult.error);
+  }
+
+  if (sendIssuesResult.error) {
+    console.error('Error fetching send issues:', sendIssuesResult.error);
+  }
+
+  const sendIssues = (sendIssuesResult.data || []) as Message[];
+
+  return {
+    failures: (failuresResult.data || []) as InboxFailure[],
+    pendingSends: sendIssues.filter((message) => message.status === 'sending'),
+    failedSends: sendIssues.filter((message) => message.status === 'send_failed'),
+  };
 }
 
 // Hidden threads management
