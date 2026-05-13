@@ -100,6 +100,13 @@ function validateNoFragileWebhookReferences(workflow) {
       addFailure(`${workflow.name} / ${node.name} contains a prompt expression that references current.text outside a code node.`);
     }
   }
+
+  for (const node of workflow.nodes || []) {
+    if (node.type !== 'n8n-nodes-base.code') continue;
+    if (String(node.parameters?.jsCode || '').includes('fetch(')) {
+      addFailure(`${workflow.name} / ${node.name} uses fetch inside an n8n Code node.`);
+    }
+  }
 }
 
 function validateWebhookPaths(workflow) {
@@ -176,6 +183,20 @@ function validateGmailInboundAttachments(workflow) {
     }
     if (!fieldIds.has('ebay_image')) {
       addFailure(`${workflow.name} / ${node.name} must preserve the third Gmail media attachment.`);
+    }
+
+    for (const field of fields) {
+      if (String(field.fieldValue || '').includes('$(') && String(field.fieldValue || '').includes('Code in JavaScript')) {
+        addFailure(`${workflow.name} / ${node.name} should read Gmail inbound fields from the AI prompt builder, not a disconnected Code node.`);
+      }
+    }
+  }
+
+  for (const [from, connection] of Object.entries(workflow.connections || {})) {
+    if (!from.startsWith('Code in JavaScript')) continue;
+    const targets = (connection.main || []).flat().filter(Boolean).map((target) => target.node);
+    if (targets.some((target) => target.startsWith('AI Agent'))) {
+      addFailure(`${workflow.name} / ${from} must not connect directly to an AI Agent; route through the prompt builder.`);
     }
   }
 }
