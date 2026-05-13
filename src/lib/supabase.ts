@@ -230,8 +230,6 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
   if (candidates.length === 0) return null;
 
   const [best] = [...candidates].sort((a: any, b: any) => {
-    const scoreDiff = getDraftCandidateScore(b.user_message) - getDraftCandidateScore(a.user_message);
-    if (scoreDiff !== 0) return scoreDiff;
     return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
   });
 
