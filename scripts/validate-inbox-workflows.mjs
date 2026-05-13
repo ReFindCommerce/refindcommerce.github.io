@@ -20,6 +20,13 @@ const GMAIL_SEND_NODES = [
   'support@easytag.app',
   'info@easytag.app',
 ];
+const ALLOWED_GMAIL_RECIPIENTS = [
+  'info@refindcommerce.com',
+  'info@easytag.app',
+  'support@refindcommerce.com',
+  'support@easytag.app',
+];
+const DISALLOWED_INBOX_RECIPIENTS = /\b(tom\.pegram@easytag\.app|tom@refindcommerce\.com)\b/i;
 
 const ALLOWED_LITERAL_STATUSES = new Set(['new', 'answered']);
 const DISALLOWED_STATUS_WORDS = /\b(sending|sent|send_failed|failed|queued)\b/i;
@@ -168,6 +175,26 @@ function validateGmailInboundAttachments(workflow) {
   }
 
   for (const node of workflow.nodes || []) {
+    if (node.type === 'n8n-nodes-base.switch' && stringify(node.parameters).match(DISALLOWED_INBOX_RECIPIENTS)) {
+      addFailure(`${workflow.name} / ${node.name} contains a personal email recipient in Gmail inbox routing.`);
+    }
+
+    if (
+      node.type === 'n8n-nodes-base.code' &&
+      (node.name === 'Code in JavaScript' || node.name === 'Code in JavaScript2' || node.name === 'Code in JavaScript3' || node.name === 'Code in JavaScript5') &&
+      String(node.parameters?.jsCode || '').includes('normalizeAddresses')
+    ) {
+      const code = String(node.parameters?.jsCode || '');
+      for (const recipient of ALLOWED_GMAIL_RECIPIENTS) {
+        if (!code.includes(recipient)) {
+          addFailure(`${workflow.name} / ${node.name} is missing allowed Gmail recipient ${recipient}.`);
+        }
+      }
+      if (!code.includes('hasAllowedRecipient')) {
+        addFailure(`${workflow.name} / ${node.name} must drop Gmail messages for non-inbox recipients before AI/Supabase.`);
+      }
+    }
+
     if (node.type !== 'n8n-nodes-base.supabase') continue;
 
     const fields = fieldValues(node);
