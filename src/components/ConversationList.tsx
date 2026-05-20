@@ -41,6 +41,9 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
   const loadRequestId = useRef(0);
   
   const { hiddenThreadIds, hideThreads, showThreads, isHidden, loading: hiddenLoading } = useHiddenThreads();
+  const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
+  const hasSearch = Boolean(searchQuery.trim());
+  const shouldIncludeArchived = hideMode || hasSearch || hasActiveFilters;
 
   const loadConversations = useCallback(async (showLoader = false) => {
     const requestId = ++loadRequestId.current;
@@ -56,6 +59,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
         channels: filters.channels.length > 0 ? filters.channels : undefined,
         thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
         message_to: filters.message_to.length > 0 ? filters.message_to : undefined,
+        includeArchived: shouldIncludeArchived,
       });
 
       if (requestId !== loadRequestId.current) return;
@@ -66,7 +70,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
     } catch (error) {
       console.error('Failed to refresh conversations:', error);
       if (requestId === loadRequestId.current) {
-        setLoadError('Refresh failed. Showing the last loaded conversations.');
+        setLoadError(showLoader || conversations.length === 0 ? 'Refresh failed. Please try again.' : null);
       }
     } finally {
       if (requestId === loadRequestId.current) {
@@ -74,7 +78,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
         setRefreshing(false);
       }
     }
-  }, [filters]);
+  }, [filters, shouldIncludeArchived, conversations.length]);
 
   useEffect(() => {
     loadConversations(true);
@@ -129,9 +133,6 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
 
   const query = normalizeSearchText(searchQuery);
   const compactQuery = normalizeCompactText(searchQuery);
-  const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
-  const hasSearch = Boolean(searchQuery.trim());
-  const shouldIncludeArchived = hideMode || hasSearch || hasActiveFilters;
   const baseConversations = shouldIncludeArchived
     ? conversations
     : conversations.filter((conv) => !isArchivedDefaultConversation(conv));

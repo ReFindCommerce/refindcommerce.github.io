@@ -51,6 +51,8 @@ const CONVERSATION_SELECT = [
   'uploaded_at',
 ].join(',');
 
+const DEFAULT_CONVERSATION_LOOKBACK_DAYS = 16;
+
 function getConversationKey(message: Pick<Message, 'channel' | 'thread_id' | 'message_to'>): string {
   const threadId = message.thread_id || 'unknown-thread';
   const channel = String(message.channel || 'unknown-channel').toLowerCase();
@@ -83,13 +85,32 @@ export async function fetchMessages(threadId: string, messageTo?: string): Promi
   return data || [];
 }
 
+function getDefaultConversationCutoff(): string {
+  return new Date(Date.now() - DEFAULT_CONVERSATION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchAllRows(query: any): Promise<any[]> {
   const PAGE_SIZE = 1000;
   let allData: any[] = [];
   let from = 0;
   
   while (true) {
-    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+    let data: any[] | null = null;
+    let error: any = null;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await query.range(from, from + PAGE_SIZE - 1);
+      data = result.data;
+      error = result.error;
+
+      if (!error) break;
+      if (attempt < 2) await wait(500 * (attempt + 1));
+    }
+
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData = allData.concat(data);
@@ -104,12 +125,17 @@ export async function fetchConversations(filters?: {
   channels?: Channel[];
   thread_ids?: string[];
   message_to?: string[];
+  includeArchived?: boolean;
 }): Promise<Conversation[]> {
   let query = supabase
     .from(TABLE_NAME)
     .select(CONVERSATION_SELECT)
     .order('uploaded_at', { ascending: true })
     .order('id', { ascending: true });
+
+  if (!filters?.includeArchived) {
+    query = query.gte('uploaded_at', getDefaultConversationCutoff());
+  }
 
   if (filters?.channels && filters.channels.length > 0) {
     query = query.in('channel', filters.channels);
