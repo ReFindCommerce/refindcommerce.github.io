@@ -3,7 +3,7 @@ import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox
 import { formatSuggestedReply } from '@/lib/textFormat';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -35,6 +35,20 @@ const MESSAGE_SELECT = [
   'in_reply_to',
   'item_id_ebay',
   'subject_ebay_message',
+].join(',');
+
+const CONVERSATION_SELECT = [
+  'id',
+  'channel',
+  'thread_id',
+  'message_from',
+  'message_to',
+  'sender_name',
+  'direction',
+  'user_message',
+  'final_reply',
+  'status',
+  'uploaded_at',
 ].join(',');
 
 function getConversationKey(message: Pick<Message, 'channel' | 'thread_id' | 'message_to'>): string {
@@ -93,7 +107,7 @@ export async function fetchConversations(filters?: {
 }): Promise<Conversation[]> {
   let query = supabase
     .from(TABLE_NAME)
-    .select(MESSAGE_SELECT)
+    .select(CONVERSATION_SELECT)
     .order('uploaded_at', { ascending: true })
     .order('id', { ascending: true });
 
