@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox';
 import { formatSuggestedReply } from '@/lib/textFormat';
+import { buildEnglishFallbackReply, shouldReplaceWithEnglishFallback } from '@/lib/languageRules';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -274,6 +275,15 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
   });
 
   if (!best?.ai_reply) return null;
+
+  const needsEnglishFallback = shouldReplaceWithEnglishFallback(best.user_message, best.ai_reply);
+  if (needsEnglishFallback) {
+    return {
+      reply: buildEnglishFallbackReply(best.user_message),
+      confidence: 35,
+      confidenceReason: 'English fallback used because the customer message did not clearly indicate another language',
+    };
+  }
 
   return {
     reply: formatSuggestedReply(best.ai_reply),
