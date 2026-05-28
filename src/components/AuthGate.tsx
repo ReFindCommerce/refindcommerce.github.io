@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 
 const AUTH_STORAGE_KEY = "refind_inbox_auth_v1";
 const PASSCODE_HASH =
-  "bb202f25745fa785c30db92cdf19b8d63616123163fad3bb713ab640895cd55d";
+  "ead106fc782fda164e599dea0baa56f367250bb2730da502242892bb0d1c6d5e";
 
 async function sha256(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
@@ -129,4 +129,3 @@ export function AuthGate({ children }: AuthGateProps) {
     </main>
   );
 }
-
