@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>ReFind Inbox</title>
+    <script>
+      if (window.location.hostname === "refindcommerce.github.io") {
+        window.location.replace(
+          "https://inbox.refindcommerce.com" +
+            window.location.pathname +
+            window.location.search +
+            window.location.hash
+        );
+      }
+    </script>
     <meta name="description" content="Unified customer inbox for ReFind Commerce and EasyTag." />
     <meta name="author" content="ReFind Commerce" />
     <meta name="theme-color" content="#ffffff" />
@@ -29,3 +39,4 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+
