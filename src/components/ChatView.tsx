@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/lib/draftState';
 import { buildTranslateUrl, extractContactInfo } from '@/lib/messageParsing';
-import { cleanMessageText } from '@/lib/textFormat';
+import { cleanMessageText, formatSuggestedReply } from '@/lib/textFormat';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -193,7 +193,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     setSending(true);
     
     try {
-      const trimmedReply = replyText.trim();
+      const trimmedReply = formatSuggestedReply(replyText).trim();
       let agentImageUrl: string | null = null;
 
       if (selectedMedia) {
