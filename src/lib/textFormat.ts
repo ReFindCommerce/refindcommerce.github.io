@@ -70,7 +70,7 @@ export function formatSuggestedReply(value: string | null | undefined): string {
   return text
     .replace(/\s+(https?:\/\/\S+)/g, '\n$1')
     .replace(/^(Hello|Hi|Dear)([^,\n]*),\s+/i, '$1$2,\n\n')
-    .replace(/\s+(If you need|If you have|If there is|If there are|Thank you for|I apologise|I apologize|Please let me know|We will|You can|You can find)\b/g, '\n\n$1')
+    .replace(/\s+(If you need|If you have|If there is|If there are|Thank you for|To help resolve|Could you please|Please could you|Please confirm|Please let me know|What is the|Once I have|Looking forward to|I look forward to|I apologise|I apologize|We will|You can|You can find)\b/g, '\n\n$1')
     .replace(/\s+(Best wishes|Best regards|Kind regards|Many thanks|Thanks),\s*/i, '\n\n$1,\n')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
