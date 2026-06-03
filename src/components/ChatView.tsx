@@ -3,7 +3,7 @@ import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
 import { fetchMessages, getLatestAiDraft } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge, LockKeyhole } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/lib/draftState';
 import { buildTranslateUrl, extractContactInfo } from '@/lib/messageParsing';
 import { cleanMessageText, formatSuggestedReply } from '@/lib/textFormat';
+import { useAuthGate } from './AuthGate';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -36,6 +37,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRetryTimersRef = useRef<number[]>([]);
   const { toast } = useToast();
+  const { lockInbox } = useAuthGate();
   const latestMessageId = messages[messages.length - 1]?.id;
   const conversationKey = conversation?.conversation_key || null;
   const gmailMessageTo = conversation?.channel === 'gmail' ? conversation.message_to : undefined;
@@ -399,16 +401,29 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               to: {conversation.message_to}
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={loadMessages}
-            className="h-8 w-8 shrink-0"
-            title="Refresh conversation"
-            disabled={loading}
-          >
-            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={loadMessages}
+              className="h-8 w-8"
+              title="Refresh conversation"
+              disabled={loading}
+            >
+              <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={lockInbox}
+              className="h-8 px-2"
+              title="Lock inbox"
+              type="button"
+            >
+              <LockKeyhole className="h-4 w-4" />
+              Lock
+            </Button>
+          </div>
         </div>
       </div>
 
