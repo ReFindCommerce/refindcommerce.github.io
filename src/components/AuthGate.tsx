@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { LockKeyhole, LogOut } from "lucide-react";
+import { createContext, FormEvent, useContext, useEffect, useMemo, useState } from "react";
+import { LockKeyhole } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,22 @@ function getStoredAuth(): boolean {
 type AuthGateProps = {
   children: React.ReactNode;
 };
+
+type AuthContextValue = {
+  lockInbox: () => void;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function useAuthGate(): AuthContextValue {
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuthGate must be used inside AuthGate");
+  }
+
+  return context;
+}
 
 export function AuthGate({ children }: AuthGateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(getStoredAuth);
@@ -73,21 +89,7 @@ export function AuthGate({ children }: AuthGateProps) {
   };
 
   if (isAuthenticated) {
-    return (
-      <>
-        <Button
-          className="fixed right-4 top-4 z-50 h-9 bg-white/90 text-slate-700 shadow-sm backdrop-blur hover:bg-white"
-          onClick={handleLogout}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Lock
-        </Button>
-        {children}
-      </>
-    );
+    return <AuthContext.Provider value={{ lockInbox: handleLogout }}>{children}</AuthContext.Provider>;
   }
 
   return (
