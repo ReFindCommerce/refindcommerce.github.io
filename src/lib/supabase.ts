@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox';
 import { formatSuggestedReply } from '@/lib/textFormat';
 import { buildEnglishFallbackReply, shouldReplaceWithEnglishFallback } from '@/lib/languageRules';
+import { applyProductFactGuard } from '@/lib/productFactGuards';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -237,6 +238,11 @@ export interface AiDraft {
   confidenceReason: string | null;
 }
 
+type AiDraftRow = Pick<
+  Message,
+  'ai_reply' | 'ai_confidence' | 'ai_confidence_reason' | 'user_message' | 'final_reply' | 'direction' | 'uploaded_at'
+>;
+
 export async function getLatestAiDraft(threadId: string, messageTo?: string): Promise<AiDraft | null> {
   let query = supabase
     .from(TABLE_NAME)
@@ -256,25 +262,47 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
     return null;
   }
 
-  const rows = data || [];
-  const latestOutbound = rows.find((message: any) => message.direction === 'outbound');
+  const rows = (data || []) as AiDraftRow[];
+  const latestOutbound = rows.find((message) => message.direction === 'outbound');
   const latestOutboundTime = latestOutbound ? new Date(latestOutbound.uploaded_at).getTime() : 0;
-  const unresolvedInbound = rows.filter((message: any) => {
+  const unresolvedInbound = rows.filter((message) => {
     if (message.direction !== 'inbound') return false;
     if (!message.ai_reply) return false;
     return new Date(message.uploaded_at).getTime() >= latestOutboundTime;
   });
   const candidates = unresolvedInbound.length > 0
     ? unresolvedInbound
-    : rows.filter((message: any) => message.direction === 'inbound' && message.ai_reply);
+    : rows.filter((message) => message.direction === 'inbound' && message.ai_reply);
 
   if (candidates.length === 0) return null;
 
-  const [best] = [...candidates].sort((a: any, b: any) => {
+  const [best] = [...candidates].sort((a, b) => {
     return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
   });
 
   if (!best?.ai_reply) return null;
+
+  const confidence = typeof best.ai_confidence === 'number'
+    ? best.ai_confidence
+    : estimateLegacyDraftConfidence(best.user_message, rows);
+  const confidenceReason = best.ai_confidence_reason || getLegacyDraftConfidenceReason(best.user_message);
+  const customerContext = rows
+    .filter((message) => message.direction === 'inbound')
+    .sort((a, b) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime())
+    .map((message) => message.user_message)
+    .filter(Boolean)
+    .join('\n');
+  const guardedDraft = applyProductFactGuard({
+    latestCustomerMessage: best.user_message,
+    customerContext,
+    aiReply: best.ai_reply,
+    confidence,
+    confidenceReason,
+  });
+
+  if (guardedDraft) {
+    return guardedDraft;
+  }
 
   const needsEnglishFallback = shouldReplaceWithEnglishFallback(best.user_message, best.ai_reply);
   if (needsEnglishFallback) {
@@ -287,10 +315,8 @@ export async function getLatestAiDraft(threadId: string, messageTo?: string): Pr
 
   return {
     reply: formatSuggestedReply(best.ai_reply),
-    confidence: typeof best.ai_confidence === 'number'
-      ? best.ai_confidence
-      : estimateLegacyDraftConfidence(best.user_message, rows),
-    confidenceReason: best.ai_confidence_reason || getLegacyDraftConfidenceReason(best.user_message),
+    confidence,
+    confidenceReason,
   };
 }
 
@@ -314,10 +340,10 @@ function getDraftCandidateScore(message: string | null): number {
   return Math.min(100, 10 + words.length);
 }
 
-function estimateLegacyDraftConfidence(message: string | null, rows: any[]): number {
+function estimateLegacyDraftConfidence(message: string | null, rows: Array<Pick<Message, 'direction' | 'user_message'>>): number {
   const text = String(message || '').trim();
   const words = text.split(/\s+/).filter(Boolean);
-  const hasRecentContext = rows.some((row: any) => row.direction === 'inbound' && row.user_message && row.user_message !== message);
+  const hasRecentContext = rows.some((row) => row.direction === 'inbound' && row.user_message && row.user_message !== message);
 
   if (!text) return 35;
   if (getDraftCandidateScore(text) <= 1) return hasRecentContext ? 55 : 40;
