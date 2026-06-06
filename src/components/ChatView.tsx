@@ -372,14 +372,14 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center gap-2 p-3 md:p-4 border-b border-border bg-card">
+      <div className="flex flex-wrap items-center gap-2 p-3 md:flex-nowrap md:gap-3 md:p-4 border-b border-border bg-card">
         {onBack && (
           <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
         
-        <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-2 md:gap-3">
           <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-muted flex items-center justify-center text-base md:text-lg shrink-0">
             {channelIcon}
           </div>
@@ -392,12 +392,19 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               <span className="truncate">{conversation.thread_id}</span>
             </div>
           </div>
-          
-          <div className="flex flex-col items-end gap-1 shrink-0">
+
+        </div>
+
+        <div className={cn(
+          'flex basis-full items-center justify-between gap-2 min-w-0',
+          onBack && 'pl-10',
+          'md:basis-auto md:justify-end md:pl-0'
+        )}>
+          <div className="flex min-w-0 items-center gap-2">
             <Badge className={cn('capitalize text-xs', badgeClass)}>
               {conversation.channel}
             </Badge>
-            <span className="text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] md:max-w-none">
+            <span className="min-w-0 truncate text-[10px] md:text-xs text-muted-foreground max-w-[52vw] sm:max-w-[240px] md:max-w-none">
               to: {conversation.message_to}
             </span>
           </div>
@@ -416,12 +423,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
               variant="outline"
               size="sm"
               onClick={lockInbox}
-              className="h-8 px-2"
+              className="h-8 w-8 px-0 sm:w-auto sm:px-2"
               title="Lock inbox"
               type="button"
             >
               <LockKeyhole className="h-4 w-4" />
-              Lock
+              <span className="sr-only sm:not-sr-only sm:ml-1">Lock</span>
             </Button>
           </div>
         </div>
