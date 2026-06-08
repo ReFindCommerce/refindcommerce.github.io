@@ -27,6 +27,12 @@ The inbox validation checks that:
 - Required n8n workflows are active.
 - Supabase status writes use only supported inbox statuses.
 - Gmail outbound sends connect directly to `Respond to Webhook`.
+- Each Gmail outbound send node explicitly sets the matching sender/from alias:
+  - `info@refindcommerce.com`
+  - `support@refindcommerce.com`
+  - `info@easytag.app`
+  - `support@easytag.app`
+- Personal mailboxes such as `tom@refindcommerce.com` must never be configured as Gmail inbox recipients or sender aliases.
 - The fragile post-send status update chain cannot block customer replies.
 - `Webhook.item` references are not reintroduced.
 - Production webhook paths remain stable.
@@ -38,6 +44,7 @@ After the validation passes, run one safe Gmail test to `tom@refindcommerce.com`
 - n8n returns `200 OK`.
 - The latest Gmail workflow execution is `success/webhook`.
 - The response includes Gmail message/thread IDs.
+- The delivered email shows the correct mailbox in Gmail's visible `From` header, not a personal Gmail account.
 
 Do not remove email notifications or make broad workflow rewires until the replacement notification path has passed a live device test.
 

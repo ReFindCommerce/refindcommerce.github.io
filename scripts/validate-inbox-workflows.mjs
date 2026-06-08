@@ -20,6 +20,12 @@ const GMAIL_SEND_NODES = [
   'support@easytag.app',
   'info@easytag.app',
 ];
+const GMAIL_SEND_NODE_ALIASES = {
+  'info@refindcommerce.com': 'info@refindcommerce.com',
+  'support@refindcommerce.com': 'support@refindcommerce.com',
+  'support@easytag.app': 'support@easytag.app',
+  'info@easytag.app': 'info@easytag.app',
+};
 const ALLOWED_GMAIL_RECIPIENTS = [
   'info@refindcommerce.com',
   'info@easytag.app',
@@ -74,6 +80,53 @@ function connectionTargets(workflow, nodeName) {
 
 function fieldValues(node) {
   return node.parameters?.fieldsUi?.fieldValues || [];
+}
+
+function collectSenderAliasConfig(value, path = [], aliases = []) {
+  if (!value || typeof value !== 'object') {
+    const pathText = path.join('.');
+    if (/(from|sender|sendas|send_as|alias)/i.test(pathText)) {
+      aliases.push(String(value ?? ''));
+    }
+    return aliases;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => collectSenderAliasConfig(entry, [...path, String(index)], aliases));
+    return aliases;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    collectSenderAliasConfig(entry, [...path, key], aliases);
+  }
+
+  return aliases;
+}
+
+function validateGmailSendNodeAlias(workflow, nodeName) {
+  const node = (workflow.nodes || []).find((candidate) => candidate.name === nodeName);
+  if (!node) {
+    addFailure(`${workflow.name} is missing Gmail send node ${nodeName}.`);
+    return;
+  }
+
+  const nodeConfigText = stringify({
+    parameters: node.parameters,
+    credentials: node.credentials,
+  });
+
+  if (DISALLOWED_INBOX_RECIPIENTS.test(nodeConfigText)) {
+    addFailure(`${workflow.name} / ${nodeName} must not configure a personal Gmail sender alias.`);
+  }
+
+  const expectedAlias = GMAIL_SEND_NODE_ALIASES[nodeName];
+  const senderAliasConfigText = collectSenderAliasConfig(node.parameters).join('\n');
+
+  if (!senderAliasConfigText.includes(expectedAlias)) {
+    addFailure(
+      `${workflow.name} / ${nodeName} must explicitly set the Gmail sender/from alias to ${expectedAlias}; the node name alone is not enough.`
+    );
+  }
 }
 
 function validateStatusFields(workflow) {
@@ -142,6 +195,8 @@ function validateGmailSendWorkflow(workflow) {
   }
 
   for (const nodeName of GMAIL_SEND_NODES) {
+    validateGmailSendNodeAlias(workflow, nodeName);
+
     const targets = connectionTargets(workflow, nodeName);
     if (!targets.includes('Respond to Webhook')) {
       addFailure(`${workflow.name} / ${nodeName} must connect directly to Respond to Webhook.`);

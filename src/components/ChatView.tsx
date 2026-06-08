@@ -14,6 +14,7 @@ import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/li
 import { buildTranslateUrl, extractContactInfo } from '@/lib/messageParsing';
 import { cleanMessageText, formatSuggestedReply } from '@/lib/textFormat';
 import { useAuthGate } from './AuthGate';
+import { assertGmailSenderRule } from '@/lib/gmailSenderRules';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -243,6 +244,9 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
       const gmailMessageId = lastInbound?.gmail_message_id || lastInbound?.message_id_ebay || undefined;
       const gmailThreadId = lastInbound?.gmail_thread_id || conversation.thread_id;
+      const channel = conversation.channel.toLowerCase();
+      const gmailInboxAddress = lastInbound?.message_to || conversation.message_to;
+      const gmailSenderRule = channel === 'gmail' ? assertGmailSenderRule(gmailInboxAddress) : null;
       const recentHistory = messages.slice(-12).map((message) => ({
         direction: message.direction,
         at: message.uploaded_at,
@@ -251,7 +255,6 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       const extractedContact = extractContactInfo(lastInbound?.user_message || '');
       
       // Determine webhook URL based on channel
-      const channel = conversation.channel.toLowerCase();
       const webhookUrl = CHANNEL_WEBHOOKS[channel] || CHANNEL_WEBHOOKS['whatsapp'];
 
       // Prepare the payload
@@ -260,7 +263,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         channel: conversation.channel,
         thread_id: conversation.thread_id,
         message_from: conversation.message_from,
-        message_to: conversation.message_to,
+        message_to: gmailSenderRule?.inboxAddress || conversation.message_to,
         sender_name: conversation.sender_name,
         user_type: 'agent',
         direction: 'outbound',
@@ -273,7 +276,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         gmail_message_id: channel === 'gmail' ? gmailMessageId : undefined,
         in_reply_to: channel === 'gmail' ? gmailMessageId : undefined,
         original_message_from: lastInbound?.message_from || conversation.message_from,
-        original_message_to: lastInbound?.message_to || conversation.message_to,
+        original_message_to: gmailSenderRule?.inboxAddress || lastInbound?.message_to || conversation.message_to,
+        mailbox_recipient: gmailSenderRule?.inboxAddress,
+        required_from_alias: gmailSenderRule?.fromEmail,
+        expected_from_alias: gmailSenderRule?.fromEmail,
+        outbound_sender_email: gmailSenderRule?.fromEmail,
+        outbound_sender_name: gmailSenderRule?.fromName,
+        reply_to_email: gmailSenderRule?.fromEmail,
         resolved_customer_email: extractedContact.email || undefined,
         resolved_customer_phone: extractedContact.phone || undefined,
         latest_customer_message: cleanMessageText(lastInbound?.user_message),
@@ -337,9 +346,10 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
     } catch (error) {
       console.error('Error sending message:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
       toast({
         title: 'Error',
-        description: 'Failed to send message. Please try again.',
+        description: errorMessage.startsWith('Blocked Gmail send') ? errorMessage : 'Failed to send message. Please try again.',
         variant: 'destructive',
       });
     } finally {
