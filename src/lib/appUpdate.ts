@@ -1,18 +1,20 @@
-import { hasSavedDrafts, onActiveDraftStateChange } from './draftState';
+import { onActiveDraftStateChange } from './draftState';
 
 const APP_UPDATE_EVENT = 'refind-app-update-available';
+const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 let hasActiveEditorDraft = false;
 let pendingWorker: ServiceWorker | null = null;
 let reloadingForUpdate = false;
 let activeRegistration: ServiceWorkerRegistration | null = null;
+let updateCheckInFlight = false;
 
 function notifyUpdateAvailable(): void {
   window.dispatchEvent(new CustomEvent(APP_UPDATE_EVENT, { detail: { available: true } }));
 }
 
 function canReloadForUpdate(): boolean {
-  return !hasActiveEditorDraft && !hasSavedDrafts();
+  return !hasActiveEditorDraft;
 }
 
 function activatePendingUpdate(): void {
@@ -37,8 +39,28 @@ export function applyPendingAppUpdate(): boolean {
 export async function checkForAppUpdate(): Promise<boolean> {
   if (!activeRegistration) return false;
 
-  await activeRegistration.update();
+  await checkRegistrationForUpdate();
   return Boolean(pendingWorker || activeRegistration.waiting);
+}
+
+async function checkRegistrationForUpdate(): Promise<void> {
+  if (!activeRegistration || updateCheckInFlight) return;
+
+  updateCheckInFlight = true;
+
+  try {
+    await activeRegistration.update();
+
+    if (activeRegistration.waiting) {
+      pendingWorker = activeRegistration.waiting;
+      notifyUpdateAvailable();
+      activatePendingUpdate();
+    }
+  } catch (error) {
+    console.warn('App update check failed:', error);
+  } finally {
+    updateCheckInFlight = false;
+  }
 }
 
 export async function refreshAppShell(): Promise<void> {
@@ -109,4 +131,14 @@ export function watchAppUpdates(registration: ServiceWorkerRegistration): void {
     notifyUpdateAvailable();
     activatePendingUpdate();
   }
+
+  window.setTimeout(checkRegistrationForUpdate, 3000);
+  window.setInterval(checkRegistrationForUpdate, UPDATE_CHECK_INTERVAL_MS);
+  window.addEventListener('online', checkRegistrationForUpdate);
+  window.addEventListener('pageshow', checkRegistrationForUpdate);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkRegistrationForUpdate();
+    }
+  });
 }

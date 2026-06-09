@@ -21,6 +21,9 @@ interface ChatViewProps {
   onBack?: () => void;
 }
 
+const SEND_TIMEOUT_MS = 45_000;
+const STUCK_SEND_RECOVERY_MS = 60_000;
+
 export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,6 +40,8 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRetryTimersRef = useRef<number[]>([]);
+  const sendStartedAtRef = useRef<number | null>(null);
+  const loadMessagesRef = useRef<() => void>(() => undefined);
   const { toast } = useToast();
   const { lockInbox } = useAuthGate();
   const latestMessageId = messages[messages.length - 1]?.id;
@@ -193,7 +198,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const handleSend = async () => {
     if (!conversation || (!replyText.trim() && !selectedMedia)) return;
 
+    if (!navigator.onLine) {
+      toast({
+        title: 'You appear to be offline',
+        description: 'Please reconnect, then try sending again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSending(true);
+    sendStartedAtRef.current = Date.now();
     
     try {
       const trimmedReply = formatSuggestedReply(replyText).trim();
@@ -316,17 +331,13 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       }
 
       // Send to webhook
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await postJsonWithTimeout(webhookUrl, payload, SEND_TIMEOUT_MS);
 
       if (!response.ok) {
         throw new Error('Failed to send message');
       }
+
+      sendStartedAtRef.current = null;
 
       toast({
         title: 'Sent!',
@@ -346,16 +357,64 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
 
     } catch (error) {
       console.error('Error sending message:', error);
+      const timedOut = isAbortError(error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message. Please try again.';
       toast({
-        title: 'Error',
-        description: errorMessage.startsWith('Blocked Gmail send') ? errorMessage : 'Failed to send message. Please try again.',
+        title: timedOut ? 'Send timed out' : 'Error',
+        description: getSendErrorDescription(errorMessage, timedOut),
         variant: 'destructive',
       });
+
+      if (timedOut) {
+        setTimeout(loadMessages, 1000);
+      }
     } finally {
+      sendStartedAtRef.current = null;
+      setUploadingImage(false);
       setSending(false);
     }
   };
+  loadMessagesRef.current = loadMessages;
+
+  useEffect(() => {
+    const recoverStuckSend = () => {
+      if (!sendStartedAtRef.current) return;
+      if (Date.now() - sendStartedAtRef.current < STUCK_SEND_RECOVERY_MS) return;
+
+      sendStartedAtRef.current = null;
+      setSending(false);
+      setUploadingImage(false);
+
+      toast({
+        title: 'Send check reset',
+        description: 'The mobile app was still waiting for a send response, so the conversation has been refreshed before retrying.',
+      });
+      loadMessagesRef.current();
+    };
+
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        recoverStuckSend();
+      }
+    };
+
+    const handleOnline = () => {
+      recoverStuckSend();
+      loadMessagesRef.current();
+    };
+
+    window.addEventListener('focus', recoverStuckSend);
+    window.addEventListener('pageshow', recoverStuckSend);
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      window.removeEventListener('focus', recoverStuckSend);
+      window.removeEventListener('pageshow', recoverStuckSend);
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  }, [conversationKey, toast]);
 
   if (!conversation) {
     return (
@@ -603,6 +662,44 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       </div>
     </div>
   );
+}
+
+async function postJsonWithTimeout(
+  url: string,
+  payload: Record<string, string | null | undefined>,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function getSendErrorDescription(errorMessage: string, timedOut: boolean): string {
+  if (timedOut) {
+    return 'The mobile app stopped waiting for the send response. Please check the refreshed conversation before retrying, to avoid sending twice.';
+  }
+
+  if (errorMessage.startsWith('Blocked Gmail send')) {
+    return errorMessage;
+  }
+
+  return 'Failed to send message. Please try again.';
 }
 
 function getConfidenceLabel(confidence: number | null): string {

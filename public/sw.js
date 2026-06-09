@@ -1,4 +1,5 @@
-const CACHE_NAME = "refind-inbox-v23";
+const CACHE_NAME = "refind-inbox-v24";
+const NETWORK_TIMEOUT_MS = 5000;
 const APP_ASSETS = [
   "/",
   "/index.html",
@@ -18,9 +19,41 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
+
+function fetchWithTimeout(request, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(request, { signal: controller.signal }).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
+async function networkFirst(request, fallbackUrl) {
+  try {
+    const response = await fetchWithTimeout(request, NETWORK_TIMEOUT_MS);
+    const cache = await caches.open(CACHE_NAME);
+    cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    const fallback = fallbackUrl ? await caches.match(fallbackUrl) : null;
+    return cached || fallback || Response.error();
+  }
+}
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  const cache = await caches.open(CACHE_NAME);
+  cache.put(request, response.clone());
+  return response;
+}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -35,15 +68,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
-        return response;
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/index.html")))
-  );
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirst(request, "/index.html"));
+    return;
+  }
+
+  if (url.pathname.startsWith("/assets/")) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  event.respondWith(networkFirst(request));
 });
 
 self.addEventListener("message", (event) => {
