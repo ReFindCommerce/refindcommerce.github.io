@@ -21,6 +21,8 @@ interface ConversationListProps {
 
 const CONVERSATION_ARCHIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const ANSWERED_ARCHIVE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+const SILENT_REFRESH_INTERVAL_MS = 20_000;
+const CONVERSATION_REFRESH_TIMEOUT_MS = 15_000;
 
 export function ConversationList({ selectedConversationKey, onSelectConversation }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -39,6 +41,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
   });
   const isFirstLoad = useRef(true);
   const loadRequestId = useRef(0);
+  const loadInFlight = useRef(false);
   
   const { hiddenThreadIds, hideThreads, showThreads, isHidden, loading: hiddenLoading } = useHiddenThreads();
   const hasActiveFilters = filters.channels.length > 0 || filters.thread_ids.length > 0 || filters.message_to.length > 0;
@@ -46,6 +49,15 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
   const shouldIncludeArchived = hideMode || hasSearch || hasActiveFilters;
 
   const loadConversations = useCallback(async (showLoader = false) => {
+    if (!showLoader && (document.visibilityState !== 'visible' || !navigator.onLine)) {
+      return;
+    }
+
+    if (loadInFlight.current && !showLoader) {
+      return;
+    }
+
+    loadInFlight.current = true;
     const requestId = ++loadRequestId.current;
 
     if (showLoader) {
@@ -55,12 +67,16 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
     }
 
     try {
-      const data = await fetchConversations({
-        channels: filters.channels.length > 0 ? filters.channels : undefined,
-        thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
-        message_to: filters.message_to.length > 0 ? filters.message_to : undefined,
-        includeArchived: shouldIncludeArchived,
-      });
+      const data = await withTimeout(
+        fetchConversations({
+          channels: filters.channels.length > 0 ? filters.channels : undefined,
+          thread_ids: filters.thread_ids.length > 0 ? filters.thread_ids : undefined,
+          message_to: filters.message_to.length > 0 ? filters.message_to : undefined,
+          includeArchived: shouldIncludeArchived,
+        }),
+        CONVERSATION_REFRESH_TIMEOUT_MS,
+        'Conversation refresh timed out.'
+      );
 
       if (requestId !== loadRequestId.current) return;
 
@@ -77,6 +93,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
         setLoading(false);
         setRefreshing(false);
       }
+      loadInFlight.current = false;
     }
   }, [filters, shouldIncludeArchived, conversations.length]);
 
@@ -84,10 +101,30 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
     loadConversations(true);
   }, [loadConversations]);
 
-  // Silent refresh every 10 seconds
   useEffect(() => {
-    const interval = setInterval(() => loadConversations(false), 10000);
-    return () => clearInterval(interval);
+    const refreshIfActive = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        loadConversations(false);
+      }
+    };
+
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshIfActive();
+      }
+    };
+
+    const interval = setInterval(refreshIfActive, SILENT_REFRESH_INTERVAL_MS);
+    window.addEventListener('online', refreshIfActive);
+    window.addEventListener('pageshow', refreshIfActive);
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', refreshIfActive);
+      window.removeEventListener('pageshow', refreshIfActive);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
   }, [loadConversations]);
 
   const enterHideMode = () => {
@@ -326,4 +363,13 @@ function isArchivedDefaultConversation(conversation: Conversation): boolean {
   if (age > CONVERSATION_ARCHIVE_AFTER_MS) return true;
 
   return conversation.status === 'answered' && age > ANSWERED_ARCHIVE_AFTER_MS;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }

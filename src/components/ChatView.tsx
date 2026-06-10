@@ -23,6 +23,8 @@ interface ChatViewProps {
 
 const SEND_TIMEOUT_MS = 45_000;
 const STUCK_SEND_RECOVERY_MS = 60_000;
+const MESSAGE_LOAD_TIMEOUT_MS = 15_000;
+const ATTACHMENT_READ_TIMEOUT_MS = 20_000;
 
 export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -93,15 +95,23 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     };
   }, []);
 
+  useEffect(() => {
+    return () => revokePreviewUrl(mediaPreview);
+  }, [mediaPreview]);
+
   const loadMessages = async () => {
     if (!conversation) return;
     
     setLoading(true);
     try {
-      const [data, aiDraft] = await Promise.all([
-        fetchMessages(conversation.thread_id, gmailMessageTo),
-        getLatestAiDraft(conversation.thread_id, gmailMessageTo),
-      ]);
+      const [data, aiDraft] = await withTimeout(
+        Promise.all([
+          fetchMessages(conversation.thread_id, gmailMessageTo),
+          getLatestAiDraft(conversation.thread_id, gmailMessageTo),
+        ]),
+        MESSAGE_LOAD_TIMEOUT_MS,
+        'Conversation load timed out.'
+      );
       setMessages(data);
       
       const savedDraft = loadDraftState(conversation.conversation_key);
@@ -179,15 +189,15 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
     if (file) {
       setDraftIsUserEdited(true);
       setSelectedMedia(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setMediaPreview(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      setMediaPreview((currentPreview) => {
+        revokePreviewUrl(currentPreview);
+        return URL.createObjectURL(file);
+      });
     }
   };
 
   const removeMedia = () => {
+    revokePreviewUrl(mediaPreview);
     setSelectedMedia(null);
     setMediaPreview(null);
     if (fileInputRef.current) {
@@ -218,14 +228,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         setUploadingImage(true);
         
         try {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(selectedMedia);
-          });
-          
-          agentImageUrl = base64;
+          agentImageUrl = await readFileAsDataUrlWithTimeout(selectedMedia, ATTACHMENT_READ_TIMEOUT_MS);
         } catch (error) {
           console.error('Error converting attachment:', error);
           toast({
@@ -683,6 +686,58 @@ async function postJsonWithTimeout(
     });
   } finally {
     window.clearTimeout(timeoutId);
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
+
+function readFileAsDataUrlWithTimeout(file: File, timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reader.abort();
+      reject(new Error('Attachment processing timed out. Please try a smaller file.'));
+    }, timeoutMs);
+
+    const settle = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      callback();
+    };
+
+    reader.onload = () => {
+      settle(() => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error('Attachment could not be read. Please try again.'));
+      });
+    };
+    reader.onerror = () => settle(() => reject(reader.error || new Error('Attachment could not be read.')));
+    reader.onabort = () => settle(() => reject(new Error('Attachment processing was cancelled.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function revokePreviewUrl(url: string | null): void {
+  if (url?.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
   }
 }
 

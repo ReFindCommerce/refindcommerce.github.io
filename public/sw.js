@@ -1,4 +1,4 @@
-const CACHE_NAME = "refind-inbox-v24";
+const CACHE_NAME = "refind-inbox-v25";
 const NETWORK_TIMEOUT_MS = 5000;
 const APP_ASSETS = [
   "/",
