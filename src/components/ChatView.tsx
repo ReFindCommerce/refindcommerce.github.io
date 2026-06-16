@@ -15,6 +15,7 @@ import { buildTranslateUrl, extractContactInfo } from '@/lib/messageParsing';
 import { cleanMessageText, formatSuggestedReply } from '@/lib/textFormat';
 import { useAuthGate } from './AuthGate';
 import { assertGmailSenderRule } from '@/lib/gmailSenderRules';
+import { getWhatsappReplyWindowDescription, getWhatsappReplyWindowStatus } from '@/lib/whatsappReplyWindow';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -217,6 +218,18 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       return;
     }
 
+    const whatsappReplyWindow = getWhatsappReplyWindowStatus(conversation.channel, messages);
+    if (whatsappReplyWindow.applies && !whatsappReplyWindow.canSendFreeform) {
+      toast({
+        title: 'WhatsApp reply window closed',
+        description:
+          getWhatsappReplyWindowDescription(whatsappReplyWindow) ||
+          'Use an approved WhatsApp template or ask the customer to message again before replying here.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSending(true);
     sendStartedAtRef.current = Date.now();
     
@@ -337,7 +350,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
       const response = await postJsonWithTimeout(webhookUrl, payload, SEND_TIMEOUT_MS);
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        throw new Error(await getWebhookFailureMessage(response));
       }
 
       sendStartedAtRef.current = null;
@@ -440,6 +453,12 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const showAiConfidence = Boolean(replyText.trim()) && !draftIsUserEdited;
   const confidenceLabel = getConfidenceLabel(aiConfidence);
   const confidenceClass = getConfidenceClass(aiConfidence);
+  const whatsappReplyWindow = getWhatsappReplyWindowStatus(conversation.channel, messages);
+  const whatsappReplyWindowDescription = loading ? null : getWhatsappReplyWindowDescription(whatsappReplyWindow);
+  const sendDisabled =
+    sending ||
+    Boolean(whatsappReplyWindowDescription) ||
+    (!replyText.trim() && !selectedMedia);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
@@ -646,7 +665,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           
           <Button
             onClick={handleSend}
-            disabled={sending || (!replyText.trim() && !selectedMedia)}
+            disabled={sendDisabled}
             className="shrink-0 mb-0.5"
           >
             {sending ? (
@@ -657,9 +676,14 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
           </Button>
         </div>
         
-        {replyText && (
+        {replyText && !whatsappReplyWindowDescription && (
           <p className="text-xs text-muted-foreground mt-2">
             AI suggested reply loaded. Edit if needed, then press send.
+          </p>
+        )}
+        {whatsappReplyWindowDescription && (
+          <p className="text-xs text-destructive mt-2">
+            {whatsappReplyWindowDescription}
           </p>
         )}
       </div>
@@ -745,12 +769,47 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+async function getWebhookFailureMessage(response: Response): Promise<string> {
+  const details = await response.text().catch(() => '');
+  const cleanedDetails = summarizeResponseDetails(details);
+  if (!cleanedDetails) {
+    return `The send workflow returned ${response.status}.`;
+  }
+
+  return `The send workflow returned ${response.status}: ${cleanedDetails}`;
+}
+
+function summarizeResponseDetails(details: string): string {
+  const trimmed = details.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    const message = parsed.message || parsed.error || parsed.description;
+    if (typeof message === 'string') {
+      return truncateErrorText(message);
+    }
+  } catch {
+    // Fall through to plain text cleanup.
+  }
+
+  return truncateErrorText(trimmed.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '));
+}
+
+function truncateErrorText(text: string): string {
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
+}
+
 function getSendErrorDescription(errorMessage: string, timedOut: boolean): string {
   if (timedOut) {
     return 'The mobile app stopped waiting for the send response. Please check the refreshed conversation before retrying, to avoid sending twice.';
   }
 
   if (errorMessage.startsWith('Blocked Gmail send')) {
+    return errorMessage;
+  }
+
+  if (errorMessage.startsWith('The send workflow returned')) {
     return errorMessage;
   }
 

@@ -11,6 +11,7 @@ Use this process for every inbox or n8n workflow change.
   - `answered` for outbound agent replies.
 - Do not write delivery states such as `sending`, `sent`, `send_failed`, `queued`, or `failed` into `inbox_messages.status`.
 - If delivery tracking is needed, add a separate `delivery_status` column instead of changing `status`.
+- WhatsApp free-form replies must only be sent inside the 24-hour customer service window after the latest inbound customer message. Outside that window, use an approved WhatsApp template or wait for the customer to message again.
 
 ## Required Checks Before Release
 
