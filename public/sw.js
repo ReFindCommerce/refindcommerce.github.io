@@ -1,13 +1,13 @@
-const CACHE_NAME = "refind-inbox-v27";
+const CACHE_NAME = "refind-inbox-v28";
 const NETWORK_TIMEOUT_MS = 5000;
 const APP_ASSETS = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
-  "/apple-touch-icon.png",
-  "/app-icon-192.png",
-  "/app-icon-512.png",
-  "/app-icon-maskable-512.png",
+  "/apple-touch-icon-v2.png",
+  "/app-icon-192-v2.png",
+  "/app-icon-512-v2.png",
+  "/app-icon-maskable-512-v2.png",
   "/app-icon.svg",
 ];
 
@@ -110,8 +110,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: "/apple-touch-icon.png",
-      badge: "/apple-touch-icon.png",
+      icon: "/apple-touch-icon-v2.png",
+      badge: "/apple-touch-icon-v2.png",
       tag: payload.tag || "refind-inbox-message",
       data: { url: payload.url || "/" },
     })
