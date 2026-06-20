@@ -1,10 +1,13 @@
-const CACHE_NAME = "refind-inbox-v25";
+const CACHE_NAME = "refind-inbox-v26";
 const NETWORK_TIMEOUT_MS = 5000;
 const APP_ASSETS = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
   "/apple-touch-icon.png",
+  "/app-icon-192.png",
+  "/app-icon-512.png",
+  "/app-icon-maskable-512.png",
   "/app-icon.svg",
 ];
 
