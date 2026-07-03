@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wallet Tracker Troubleshooting and Setup Guide</title>
+<meta name="robots" content="index,follow">
+<style>body{font-family:Arial,sans-serif;max-width:780px;margin:40px auto;padding:0 18px;line-height:1.6;color:#172026}a{color:#1d4ed8}h1{line-height:1.2}</style>
+</head>
+<body>
+<main>
+<h1>Wallet Tracker Troubleshooting and Setup Guide</h1>
+<p>&lt;!doctype html&gt;</p>
+<p>&lt;html lang="en"&gt;</p>
+<p>&lt;head&gt;</p>
+<p>&lt;meta charset="utf-8"&gt;</p>
+<p>&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;</p>
+<p>&lt;title&gt;Wallet Tracker Troubleshooting and Setup Guide | easyTag&lt;/title&gt;</p>
+<p>&lt;style&gt;</p>
+<p>:root {</p>
+<p>--bg:;</p>
+<p>--text:;</p>
+<p>--muted:;</p>
+<p>--border:;</p>
+<p>--soft:;</p>
+<p>--brand:;</p>
+<p>--brand-dark:;</p>
+<p>--link:;</p>
+<p>--max: 980px;</p>
+<p>}</p>
+<p>{</p>
+<p>box-sizing: border-box;</p>
+<p>}</p>
+<p>body {</p>
+<p>margin: 0;</p>
+<p>background: var(--bg);</p>
+<p>color: var(--text);</p>
+<p>font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;</p>
+<p>line-height: 1.6;</p>
+<p>}</p>
+<p>a {</p>
+<p>color: var(--link);</p>
+<p>text-decoration-thickness: 1px;</p>
+<p>text-underline-offset: 3px;</p>
+<p>}</p>
+<p>a:hover {</p>
+<p>text-decoration-thickness: 2px;</p>
+<p>}</p>
+<p>.site-header {</p>
+<p>border-bottom: 1px solid var(--border);</p>
+<p>background:;</p>
+<p>}</p>
+<p>.site-header-inner {</p>
+<p>max-width: var(--max);</p>
+<p>margin: 0 auto;</p>
+<p>padding: 18px 20px;</p>
+<p>display: flex;</p>
+<p>align-items: center;</p>
+<p>justify-content: space-between;</p>
+<p>gap: 16px;</p>
+<p>}</p>
+<p>.brand {</p>
+<p>color: var(--text);</p>
+<p>font-weight: 800;</p>
+<p>font-size: 1.15rem;</p>
+<p>text-decoration: none;</p>
+<p>letter-spacing: -0.02em;</p>
+<p>}</p>
+<p>main {</p>
+<p>max-width: var(--max);</p>
+<p>margin: 0 auto;</p>
+<p>padding: 34px 20px 64px;</p>
+<p>}</p>
+<p>.eyebrow {</p>
+<p>margin: 0 0 10px;</p>
+<p>color: var(--brand-dark);</p>
+<p>font-weight: 700;</p>
+<p>text-transform: uppercase;</p>
+<p>letter-spacing: 0.08em;</p>
+<p>font-size: 0.82rem;</p>
+<p>}</p>
+<p>h1 {</p>
+<p>margin: 0;</p>
+<p>font-size: clamp(2rem, 5vw, 3.4rem);</p>
+<p>line-height: 1.08;</p>
+<p>letter-spacing: -0.04em;</p>
+<p>}</p>
+<p>h2 {</p>
+<p>margin: 42px 0 14px;</p>
+<p>font-size: clamp(1.45rem, 3vw, 2rem);</p>
+<p>line-height: 1.2;</p>
+<p>letter-spacing: -0.02em;</p>
+<p>}</p>
+<p>h3 {</p>
+<p>margin: 26px 0 10px;</p>
+<p>font-size: 1.15rem;</p>
+<p>line-height: 1.3;</p>
+<p>}</p>
+<p>p {</p>
+<p>margin: 0 0 16px;</p>
+<p>}</p>
+<p>ul,</p>
+<p>ol {</p>
+<p>margin-top: 0;</p>
+<p>padding-left: 1.3rem;</p>
+<p>}</p>
+<p>li {</p>
+<p>margin: 8px 0;</p>
+<p>}</p>
+<p>.date {</p>
+<p>margin-top: 14px;</p>
+<p>color: var(--muted);</p>
+<p>font-size: 0.95rem;</p>
+<p>}</p>
+<p>.lede {</p>
+<p>margin-top: 24px;</p>
+<p>font-size: 1.16rem;</p>
+<p>color:;</p>
+<p>max-width: 780px;</p>
+<p>}</p>
+<p>.note,</p>
+<p>.callout {</p>
+<p>border: 1px solid var(--border);</p>
+<p>background: var(--soft);</p>
+<p>border-radius: 14px;</p>
+<p>padding: 18px 20px;</p>
+<p>margin: 22px 0;</p>
+<p>}</p>
+<p>.callout {</p>
+<p>border-left: 5px solid var(--brand);</p>
+<p>}</p>
+<p>.toc {</p>
+<p>margin: 30px 0 36px;</p>
+<p>padding: 20px;</p>
+<p>border: 1px solid var(--border);</p>
+<p>border-radius: 14px;</p>
+<p>background:;</p>
+<p>}</p>
+<p>.toc h2 {</p>
+<p>margin-top: 0;</p>
+<p>font-size: 1.2rem;</p>
+<p>}</p>
+<p>.grid {</p>
+<p>display: grid;</p>
+<p>grid-template-columns: repeat(2, minmax(0, 1fr));</p>
+<p>gap: 18px;</p>
+<p>margin: 18px 0;</p>
+<p>}</p>
+<p>.card {</p>
+<p>border: 1px solid var(--border);</p>
+<p>border-radius: 14px;</p>
+<p>padding: 18px;</p>
+<p>background:;</p>
+<p>}</p>
+<p>.card h3 {</p>
+<p>margin-top: 0;</p>
+<p>}</p>
+<p>table {</p>
+<p>width: 100%;</p>
+<p>border-collapse: collapse;</p>
+<p>margin: 18px 0 26px;</p>
+<p>font-size: 0.98rem;</p>
+<p>}</p>
+<p>th,</p>
+<p>td {</p>
+<p>border: 1px solid var(--border);</p>
+<p>padding: 12px 14px;</p>
+<p>text-align: left;</p>
+<p>vertical-align: top;</p>
+<p>}</p>
+<p>th {</p>
+<p>background: var(--soft);</p>
+<p>font-weight: 700;</p>
+<p>}</p>
+<p>.cta {</p>
+<p>margin-top: 44px;</p>
+<p>padding: 24px;</p>
+<p>border-radius: 18px;</p>
+<p>background:;</p>
+<p>border: 1px solid;</p>
+<p>}</p>
+<p>.cta h2 {</p>
+<p>margin-top: 0;</p>
+<p>}</p>
+<p>.button-row {</p>
+<p>display: flex;</p>
+<p>flex-wrap: wrap;</p>
+<p>gap: 10px;</p>
+<p>margin-top: 18px;</p>
+<p>}</p>
+<p>.button {</p>
+<p>display: inline-block;</p>
+<p>padding: 10px 14px;</p>
+<p>border-radius: 999px;</p>
+<p>background: var(--brand);</p>
+<p>color:;</p>
+<p>text-decoration: none;</p>
+<p>font-weight: 700;</p>
+<p>}</p>
+<p>.button.secondary {</p>
+<p>background:;</p>
+<p>color: var(--brand-dark);</p>
+<p>border: 1px solid;</p>
+<p>}</p>
+<p>@media (max-width: 760px) {</p>
+<p>.grid {</p>
+<p>grid-template-columns: 1fr;</p>
+<p>}</p>
+<p>table,</p>
+<p>thead,</p>
+<p>tbody,</p>
+<p>th,</p>
+<p>td,</p>
+<p>tr {</p>
+<p>display: block;</p>
+<p>}</p>
+<p>th {</p>
+<p>display: none;</p>
+<p>}</p>
+<p>td {</p>
+<p>border-top: 0;</p>
+<p>}</p>
+<p>tr {</p>
+<p>border: 1px solid var(--border);</p>
+<p>margin-bottom: 12px;</p>
+<p>}</p>
+<p>tr td:first-child {</p>
+<p>border-top: 0;</p>
+<p>background: var(--soft);</p>
+<p>font-weight: 700;</p>
+<p>}</p>
+<p>}</p>
+<p>&lt;/style&gt;</p>
+<p>&lt;/head&gt;</p>
+<p>&lt;body&gt;</p>
+<p>&lt;header class="site-header"&gt;</p>
+<p>&lt;div class="site-header-inner"&gt;</p>
+<p>&lt;a class="brand" href="<a href="https://easytag.app/"&gt;easyTag&lt;/a&gt;">https://easytag.app/"&gt;easyTag&lt;/a&gt;</a></p>
+<p>&lt;/div&gt;</p>
+<p>&lt;/header&gt;</p>
+<p>&lt;main&gt;</p>
+<p>&lt;article&gt;</p>
+<p>&lt;p class="eyebrow"&gt;Guide&lt;/p&gt;</p>
+<p>&lt;h1&gt;Wallet Tracker Troubleshooting and Setup Guide&lt;/h1&gt;</p>
+<p>&lt;p class="date"&gt;Published &lt;time datetime="2026-07-12"&gt;July 12, 2026&lt;/time&gt;&lt;/p&gt;</p>
+<p>&lt;p class="lede"&gt;</p>
+<p>A wallet tracker is most useful when it is charged, paired to the right phone ecosystem, and tested before you actually need it. This guide walks through practical setup steps and common fixes for easyTag wallet trackers for Apple and Samsung/Galaxy users, plus tips for using an easyTag card with a passport cover, luggage tag, or replacement charging cable.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;div class="callout"&gt;</p>
+<p>&lt;p&gt;</p>
+<p>&lt;strong&gt;Start with the right model:&lt;/strong&gt;</p>
+<p>choose the &lt;a href="<a href="https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet</a> Tracker for Apple&lt;/a&gt; if you use Apple Find My devices, or the &lt;a href="<a href="https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet</a> Tracker for Samsung&lt;/a&gt; if you use compatible Samsung and Galaxy devices.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;nav class="toc" aria-label="Guide contents"&gt;</p>
+<p>&lt;h2&gt;Contents&lt;/h2&gt;</p>
+<p>&lt;ol&gt;</p>
+<p>&lt;li&gt;&lt;a href="#before-you-start"&gt;Before you start&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#quick-setup"&gt;Quick setup overview&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#apple-setup"&gt;Setup notes for Wallet Tracker for Apple&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#samsung-setup"&gt;Setup notes for Wallet Tracker for Samsung&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#connection-issues"&gt;Troubleshooting connection and pairing issues&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#charging"&gt;Charging and cable checks&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#travel"&gt;Using an easyTag card with passports and luggage&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#which-product"&gt;Which easyTag product should I use?&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;li&gt;&lt;a href="#faq"&gt;FAQ&lt;/a&gt;&lt;/li&gt;</p>
+<p>&lt;/ol&gt;</p>
+<p>&lt;/nav&gt;</p>
+<p>&lt;section id="before-you-start"&gt;</p>
+<p>&lt;h2&gt;Before you start&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Most setup problems come down to model compatibility, charge level, phone settings, or trying to pair the tracker before the phone is ready. Before you troubleshoot, confirm the basics below.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Confirm the tracker matches your phone ecosystem.&lt;/strong&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet</a> Tracker for Apple&lt;/a&gt; is a wallet tracking card compatible with Apple Find My devices. The &lt;a href="<a href="https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet</a> Tracker for Samsung&lt;/a&gt; is compatible with Samsung and Galaxy devices.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Charge the tracker before pairing.&lt;/strong&gt;</p>
+<p>If your original cable is missing or damaged, use the &lt;a href="<a href="https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional">https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional</a> / Replacement easyTag Charging Cable&lt;/a&gt;, a USB-C to proprietary magnetic charging cable for Apple and Samsung easyTag card trackers.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Update and prepare your phone.&lt;/strong&gt;</p>
+<p>Make sure your phone is signed in, connected to the internet, and has Bluetooth and location settings enabled for the tracking setup you are using.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Pair one tracker at a time.&lt;/strong&gt;</p>
+<p>Keep the easyTag card close to your phone during setup and move other unpaired trackers away to avoid confusion.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Use the included model instructions for exact button, reset, or indicator behavior.&lt;/strong&gt;</p>
+<p>This guide covers general setup and troubleshooting. If your product packaging or product page gives specific instructions, follow those first.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;p class="note"&gt;</p>
+<p>A tracker is a helpful backup, not a guarantee. No wallet tracker can prevent every loss or theft, so continue to keep wallets, passports, and bags secure.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="quick-setup"&gt;</p>
+<p>&lt;h2&gt;Quick setup overview&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Exact pairing steps can vary by phone and tracking ecosystem, but the setup flow usually follows the same pattern.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;ol&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Choose the correct easyTag card.&lt;/strong&gt;</p>
+<p>Use the Apple version for Apple Find My devices, or the Samsung version for compatible Samsung/Galaxy devices.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Charge the tracker.&lt;/strong&gt;</p>
+<p>Connect it with the correct easyTag magnetic charging cable and give it time to charge before beginning setup.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Open the tracking setup flow on your phone.&lt;/strong&gt;</p>
+<p>Follow the on-screen instructions for adding a new item or tracker.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Name it clearly.&lt;/strong&gt;</p>
+<p>Use a name such as ?Wallet,? ?Passport,? ?Carry-on,? or ?Backpack? so it is easy to recognize later.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Test it before relying on it.&lt;/strong&gt;</p>
+<p>Confirm the tracker appears in your phone?s tracking interface while it is nearby.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Place it in the item you want to track.&lt;/strong&gt;</p>
+<p>Put the card in your wallet, or use a dedicated holder such as the &lt;a href="<a href="https://easytag.app/products/passport-tracker-cover"&gt;Passport">https://easytag.app/products/passport-tracker-cover"&gt;Passport</a> Tracker Cover for easyTag Card&lt;/a&gt; or &lt;a href="<a href="https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage">https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage</a> Tag easyTag Card Holder&lt;/a&gt;.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;/ol&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="apple-setup"&gt;</p>
+<p>&lt;h2&gt;Setup notes for Wallet Tracker for Apple&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet</a> Tracker for Apple&lt;/a&gt; is an easyTag wallet tracking card compatible with Apple Find My devices. It is intended for people who want a wallet-friendly Apple tracker option.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;If your Apple device does not detect the tracker&lt;/h3&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;Charge the easyTag card before trying again.&lt;/li&gt;</p>
+<p>&lt;li&gt;Keep the tracker close to your Apple device during setup.&lt;/li&gt;</p>
+<p>&lt;li&gt;Make sure Bluetooth, location settings, and internet connectivity are enabled.&lt;/li&gt;</p>
+<p>&lt;li&gt;Confirm you are using the Apple-compatible easyTag model, not the Samsung-compatible model.&lt;/li&gt;</p>
+<p>&lt;li&gt;Restart your phone and reopen the tracking setup flow.&lt;/li&gt;</p>
+<p>&lt;li&gt;If the tracker was previously set up, check the model instructions for how to remove it from the previous account before pairing again.&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;h3&gt;If setup starts but does not complete&lt;/h3&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;Keep the tracker and phone close together until setup finishes.&lt;/li&gt;</p>
+<p>&lt;li&gt;Stay on a stable internet connection.&lt;/li&gt;</p>
+<p>&lt;li&gt;Do not try to add multiple trackers at the same time.&lt;/li&gt;</p>
+<p>&lt;li&gt;Follow any prompts shown on your Apple device before closing the setup screen.&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="samsung-setup"&gt;</p>
+<p>&lt;h2&gt;Setup notes for Wallet Tracker for Samsung&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet</a> Tracker for Samsung&lt;/a&gt; is an easyTag wallet tracking card compatible with Samsung and Galaxy devices. It is designed for Samsung/Galaxy users who want a tracker tag format for a wallet.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;If your Samsung or Galaxy device does not detect the tracker&lt;/h3&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;Charge the easyTag card before pairing.&lt;/li&gt;</p>
+<p>&lt;li&gt;Place the tracker next to your phone during the setup process.&lt;/li&gt;</p>
+<p>&lt;li&gt;Confirm your phone?s Bluetooth, location settings, and internet connection are on.&lt;/li&gt;</p>
+<p>&lt;li&gt;Make sure you are using the Samsung-compatible easyTag model.&lt;/li&gt;</p>
+<p>&lt;li&gt;Restart your phone and try the setup flow again.&lt;/li&gt;</p>
+<p>&lt;li&gt;If the tracker was previously connected to another phone or account, follow the model-specific instructions for removing that connection before pairing it again.&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;h3&gt;If the tracker is added but later seems inconsistent&lt;/h3&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;Check that your phone?s tracking and location permissions are still enabled.&lt;/li&gt;</p>
+<p>&lt;li&gt;Make sure your phone software is up to date.&lt;/li&gt;</p>
+<p>&lt;li&gt;Test the tracker outside your wallet or bag to rule out interference from a tight or signal-blocking compartment.&lt;/li&gt;</p>
+<p>&lt;li&gt;Recharge the tracker and test again before assuming it is a pairing issue.&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="connection-issues"&gt;</p>
+<p>&lt;h2&gt;Troubleshooting connection and pairing issues&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>If your easyTag wallet tracker is not pairing, not showing as expected, or seems delayed, work through the most likely causes first.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;table&gt;</p>
+<p>&lt;thead&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;th&gt;Problem&lt;/th&gt;</p>
+<p>&lt;th&gt;What to try&lt;/th&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;/thead&gt;</p>
+<p>&lt;tbody&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Tracker is not found during setup&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Charge the tracker, hold it close to the phone, confirm you have the right Apple or Samsung model, and make sure Bluetooth and location settings are enabled.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Setup begins but fails&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Keep the setup screen open, use a stable internet connection, restart the phone, and try again with only one tracker nearby.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Tracker was previously paired&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Follow the model instructions for removing it from the previous account or phone before trying to pair it again.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Tracker works outside the wallet but not inside&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Test a different card slot. Very tight, metal-lined, or signal-blocking compartments can interfere with wireless performance. Do not bend or force the tracker card.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Location or status seems delayed&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Check phone connectivity, permissions, and tracking settings. Tracking behavior can depend on the phone ecosystem, device settings, and surrounding conditions.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;Charging seems unreliable&lt;/td&gt;</p>
+<p>&lt;td&gt;</p>
+<p>Use the correct easyTag USB-C to proprietary magnetic charging cable, check the cable connection, inspect for debris, and try a different USB-C power source.</p>
+<p>&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;/tbody&gt;</p>
+<p>&lt;/table&gt;</p>
+<p>&lt;div class="note"&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Avoid guessing at reset steps if you are not sure which model you have. Use the instructions that came with your tracker or the relevant product page before attempting a reset.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="charging"&gt;</p>
+<p>&lt;h2&gt;Charging and cable checks&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Apple and Samsung easyTag card trackers use a USB-C to proprietary magnetic charging cable. If the original cable is unavailable, the &lt;a href="<a href="https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional">https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional</a> / Replacement easyTag Charging Cable&lt;/a&gt; is made for Apple and Samsung easyTag card trackers.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Charging troubleshooting steps&lt;/h3&gt;</p>
+<p>&lt;ol&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Use the correct cable.&lt;/strong&gt;</p>
+<p>Proprietary magnetic connectors can look similar, so use the easyTag cable intended for the card tracker.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Check the USB-C power source.&lt;/strong&gt;</p>
+<p>Try a known working USB-C port or power adapter.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Inspect the magnetic connection point.&lt;/strong&gt;</p>
+<p>Look for dust, lint, or debris. If needed, gently clean with a dry, soft cloth.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Let it charge before setup.&lt;/strong&gt;</p>
+<p>If the tracker has been unused for a while, give it uninterrupted charging time before pairing.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;li&gt;</p>
+<p>&lt;strong&gt;Do not force the connector.&lt;/strong&gt;</p>
+<p>Align the magnetic connector according to the product instructions.</p>
+<p>&lt;/li&gt;</p>
+<p>&lt;/ol&gt;</p>
+<p>&lt;p&gt;</p>
+<p>If charging problems continue after trying a known working power source and the correct cable, review the product instructions for model-specific guidance.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="travel"&gt;</p>
+<p>&lt;h2&gt;Using an easyTag card with passports and luggage&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>An easyTag card can be used beyond a wallet when it is held securely in a product designed for that use. Set up and test the tracker before travel so you are not pairing it for the first time at the airport, hotel, or security line.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;div class="grid"&gt;</p>
+<p>&lt;div class="card"&gt;</p>
+<p>&lt;h3&gt;Passport tracking&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/passport-tracker-cover"&gt;Passport">https://easytag.app/products/passport-tracker-cover"&gt;Passport</a> Tracker Cover for easyTag Card&lt;/a&gt; is a passport holder with built-in tracker card storage. It is designed for secure travel and for helping reduce the risk of loss or theft.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;div class="card"&gt;</p>
+<p>&lt;h3&gt;Luggage tracking&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage">https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage</a> Tag easyTag Card Holder&lt;/a&gt; is designed to hold an easyTag tracker card securely in a clean travel-tag format with a steel cable attachment.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;h3&gt;Travel setup tips&lt;/h3&gt;</p>
+<p>&lt;ul&gt;</p>
+<p>&lt;li&gt;Pair and test the tracker before packing.&lt;/li&gt;</p>
+<p>&lt;li&gt;Name each tracker clearly, such as ?Passport,? ?Checked Bag,? or ?Carry-on.?&lt;/li&gt;</p>
+<p>&lt;li&gt;Use the passport cover or luggage tag to hold the card securely rather than leaving it loose.&lt;/li&gt;</p>
+<p>&lt;li&gt;Do not bend the tracker card or force it into an overly tight pocket.&lt;/li&gt;</p>
+<p>&lt;li&gt;Use tracking as a backup, not as a replacement for keeping important items secure and within your control.&lt;/li&gt;</p>
+<p>&lt;/ul&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="which-product"&gt;</p>
+<p>&lt;h2&gt;Which easyTag product should I use?&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>If you are not sure which easyTag product fits your setup, use the table below as a starting point.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;table&gt;</p>
+<p>&lt;thead&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;th&gt;Need&lt;/th&gt;</p>
+<p>&lt;th&gt;Recommended easyTag product&lt;/th&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;/thead&gt;</p>
+<p>&lt;tbody&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;I use Apple Find My devices and want a wallet tracker card&lt;/td&gt;</p>
+<p>&lt;td&gt;&lt;a href="<a href="https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet</a> Tracker for Apple&lt;/a&gt;&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;I use a compatible Samsung or Galaxy device and want a wallet tracker card&lt;/td&gt;</p>
+<p>&lt;td&gt;&lt;a href="<a href="https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet</a> Tracker for Samsung&lt;/a&gt;&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;I need a spare or replacement charging cable&lt;/td&gt;</p>
+<p>&lt;td&gt;&lt;a href="<a href="https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional">https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional</a> / Replacement easyTag Charging Cable&lt;/a&gt;&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;I want to carry an easyTag card with my passport&lt;/td&gt;</p>
+<p>&lt;td&gt;&lt;a href="<a href="https://easytag.app/products/passport-tracker-cover"&gt;Passport">https://easytag.app/products/passport-tracker-cover"&gt;Passport</a> Tracker Cover for easyTag Card&lt;/a&gt;&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;tr&gt;</p>
+<p>&lt;td&gt;I want to attach an easyTag card to luggage&lt;/td&gt;</p>
+<p>&lt;td&gt;&lt;a href="<a href="https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage">https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage</a> Tag easyTag Card Holder&lt;/a&gt;&lt;/td&gt;</p>
+<p>&lt;/tr&gt;</p>
+<p>&lt;/tbody&gt;</p>
+<p>&lt;/table&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section id="faq"&gt;</p>
+<p>&lt;h2&gt;FAQ&lt;/h2&gt;</p>
+<p>&lt;h3&gt;Why is my wallet tracker not connecting?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The most common causes are low charge, the wrong tracker model for your phone, Bluetooth or location settings being off, unstable internet connection, or the tracker already being associated with another phone or account. Charge it, confirm the Apple or Samsung version, keep it close to your phone, and try setup again.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Can I use the Apple easyTag wallet tracker with a Samsung phone?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Choose the tracker that matches your phone ecosystem. The Wallet Tracker for Apple is compatible with Apple Find My devices, while the Wallet Tracker for Samsung is compatible with Samsung and Galaxy devices.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Do I need the easyTag charging cable?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Apple and Samsung easyTag card trackers use a USB-C to proprietary magnetic charging cable. If your original cable is lost or damaged, use the &lt;a href="<a href="https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional">https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Additional</a> / Replacement easyTag Charging Cable&lt;/a&gt;.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Can I use an easyTag card to track a passport?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Yes, the &lt;a href="<a href="https://easytag.app/products/passport-tracker-cover"&gt;Passport">https://easytag.app/products/passport-tracker-cover"&gt;Passport</a> Tracker Cover for easyTag Card&lt;/a&gt; includes built-in tracker card storage inside a passport holder. Set up and test the tracker before travel.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Can I attach an easyTag tracker card to luggage?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>The &lt;a href="<a href="https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage">https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage</a> Tag easyTag Card Holder&lt;/a&gt; is designed to hold an easyTag tracker card securely and includes a steel cable attachment.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;h3&gt;Does a tracker guarantee I will recover a lost item?&lt;/h3&gt;</p>
+<p>&lt;p&gt;</p>
+<p>No. A tracker can help you keep track of important items through a compatible device setup, but it cannot guarantee recovery or prevent theft. Use it alongside normal precautions for wallets, passports, and luggage.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;section class="cta" aria-label="Shop easyTag products"&gt;</p>
+<p>&lt;h2&gt;Ready to set up your easyTag?&lt;/h2&gt;</p>
+<p>&lt;p&gt;</p>
+<p>Choose the wallet tracker that matches your phone, or add a travel holder or replacement cable if you need one.</p>
+<p>&lt;/p&gt;</p>
+<p>&lt;div class="button-row"&gt;</p>
+<p>&lt;a class="button" href="<a href="https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-apple-wallet-tracker"&gt;Wallet</a> Tracker for Apple&lt;/a&gt;</p>
+<p>&lt;a class="button" href="<a href="https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet">https://easytag.app/products/easytag-samsung-wallet-tracker"&gt;Wallet</a> Tracker for Samsung&lt;/a&gt;</p>
+<p>&lt;a class="button secondary" href="<a href="https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Replacement">https://easytag.app/products/easytag-card-tracker-replacement-charging-cable"&gt;Replacement</a> Charging Cable&lt;/a&gt;</p>
+<p>&lt;a class="button secondary" href="<a href="https://easytag.app/products/passport-tracker-cover"&gt;Passport">https://easytag.app/products/passport-tracker-cover"&gt;Passport</a> Tracker Cover&lt;/a&gt;</p>
+<p>&lt;a class="button secondary" href="<a href="https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage">https://easytag.app/products/luggage-tag-easytag-card-holder"&gt;Luggage</a> Tag Card Holder&lt;/a&gt;</p>
+<p>&lt;/div&gt;</p>
+<p>&lt;/section&gt;</p>
+<p>&lt;/article&gt;</p>
+<p>&lt;/main&gt;</p>
+<p>&lt;/body&gt;</p>
+<p>&lt;/html&gt;</p>
+<p>Learn more: <a href="https://easytag.app?utm_source=link_engine&amp;utm_medium=backlink&amp;utm_campaign=link_acquisition&amp;utm_content=sched-046-github-pages-guides-wallet-tracker-troubleshooting-and-setup-guide">https://easytag.app?utm_source=link_engine&amp;utm_medium=backlink&amp;utm_campaign=link_acquisition&amp;utm_content=sched-046-github-pages-guides-wallet-tracker-troubleshooting-and-setup-guide</a></p>
+<p><small>Published by easyTag.</small></p>
+</main>
+</body>
+</html>
