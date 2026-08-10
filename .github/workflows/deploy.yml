@@ -25,6 +25,8 @@ jobs:
             echo "Skipping inbox workflow validation because N8N_API_KEY is not configured."
           fi
       - run: npm run build
+      - name: Add single-page app fallback
+        run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
