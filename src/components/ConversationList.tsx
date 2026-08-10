@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Conversation, Channel, FilterOptions } from '@/types/inbox';
 import { ConversationItem } from './ConversationItem';
 import { FilterPanel } from './FilterPanel';
@@ -7,7 +8,7 @@ import { NotificationButton } from './NotificationButton';
 import { AppUpdateButton } from './AppUpdateButton';
 import { fetchConversations } from '@/lib/supabase';
 import { useHiddenThreads } from '@/hooks/useHiddenThreads';
-import { Search, Filter, Inbox, RefreshCw, Check, X } from 'lucide-react';
+import { Search, Filter, Inbox, RefreshCw, Check, X, Megaphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -213,6 +214,17 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
             </Button>
           ) : (
             <div className="flex items-center gap-2">
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-[#d95700] hover:bg-orange-50 hover:text-[#b34800]"
+                title="Campaigns"
+              >
+                <Link to="/marketing" aria-label="Campaigns">
+                  <Megaphone className="h-4 w-4" />
+                </Link>
+              </Button>
               <AppUpdateButton />
               <NotificationButton />
               <InstallAppButton />
