@@ -79,7 +79,7 @@ function Marketing() {
   const isDryRun = settings.dry_run !== false;
   const isArmed = settings.send_endpoint_armed === true;
   const nextCampaign = dashboard?.nextCampaign || campaignsQuery.data?.find((campaign) =>
-    ["approved", "scheduled", "running"].includes(campaign.status),
+    ["draft", "approved", "scheduled", "running"].includes(campaign.status),
   ) || null;
   const audienceMetrics = [
     { label: "Eligible now", value: dashboard?.audience.eligibleNow ?? "--", note: dashboard ? "All release rules passed" : "Awaiting first Shopify sync", icon: Users, tone: "text-emerald-700 bg-emerald-50" },
