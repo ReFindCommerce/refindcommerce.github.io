@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CalendarClock,
@@ -24,40 +25,26 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-const audienceMetrics = [
-  { label: "Eligible now", value: "--", note: "Awaiting first Shopify sync", icon: Users, tone: "text-emerald-700 bg-emerald-50" },
-  { label: "Cooling period", value: "--", note: "Seven days after support", icon: Clock3, tone: "text-amber-700 bg-amber-50" },
-  { label: "Suppressed", value: "--", note: "Opt-outs and service blocks", icon: CircleSlash2, tone: "text-red-700 bg-red-50" },
-  { label: "At 30-day cap", value: "--", note: "Maximum two messages", icon: ShieldCheck, tone: "text-slate-700 bg-slate-100" },
-];
-
-const gates = [
-  { label: "WhatsApp consent verified", detail: "Shopify or service-interface evidence" },
-  { label: "Customer is satisfied", detail: "No open or unhappy support conversation" },
-  { label: "Seven-day cooling period passed", detail: "Measured from the latest service message" },
-  { label: "Frequency limit passed", detail: "Fewer than two sends in rolling 30 days" },
-  { label: "Product and link validated", detail: "Active, in stock, and destination checked" },
-];
+import { fetchMarketingCampaigns, fetchMarketingDashboard } from "@/lib/marketingApi";
 
 const templates = [
   {
-    name: "Travel reassurance",
+    name: "Travel story",
     intent: "Useful story",
-    message: "That small panic when your wallet is not where you left it? We made something for that. See how easyTag keeps the important bit findable: {{1}}",
-    status: "Draft",
+    message: "That horrible half-second when your wallet is not where you left it. Most of the time it is nearby. The panic does not know that.",
+    status: "Approved",
   },
   {
     name: "Private cohort offer",
     intent: "Limited deal",
-    message: "A quiet one for you: we opened a private easyTag offer for a small group today. It closes {{1}}. Take a look here: {{2}}",
-    status: "Draft",
+    message: "A quiet one for you. We opened a private easyTag offer for a small group today. No big sale banner. No endless countdown.",
+    status: "Approved",
   },
   {
     name: "Free travel gift",
     intent: "Monthly gift",
-    message: "Packing soon? Buy two easyTag tracker cards and we will add a free {{1}}. Your private link has everything ready: {{2}}",
-    status: "Draft",
+    message: "Packing soon? Buy two easyTag tracker cards and we will add a free travel gift. A small extra that makes the airport bag a little less chaotic.",
+    status: "Approved",
   },
 ];
 
@@ -74,6 +61,49 @@ function StatusDot({ className }: { className: string }) {
 }
 
 function Marketing() {
+  const queryClient = useQueryClient();
+  const dashboardQuery = useQuery({
+    queryKey: ["whatsapp-marketing-dashboard"],
+    queryFn: fetchMarketingDashboard,
+    refetchInterval: 60_000,
+  });
+  const campaignsQuery = useQuery({
+    queryKey: ["whatsapp-marketing-campaigns"],
+    queryFn: fetchMarketingCampaigns,
+    refetchInterval: 60_000,
+  });
+
+  const dashboard = dashboardQuery.data;
+  const settings = dashboard?.settings || {};
+  const isEnabled = settings.automation_enabled === true;
+  const isDryRun = settings.dry_run !== false;
+  const isArmed = settings.send_endpoint_armed === true;
+  const nextCampaign = dashboard?.nextCampaign || campaignsQuery.data?.find((campaign) =>
+    ["approved", "scheduled", "running"].includes(campaign.status),
+  ) || null;
+  const audienceMetrics = [
+    { label: "Eligible now", value: dashboard?.audience.eligibleNow ?? "--", note: dashboard ? "All release rules passed" : "Awaiting first Shopify sync", icon: Users, tone: "text-emerald-700 bg-emerald-50" },
+    { label: "Cooling period", value: dashboard?.audience.coolingPeriod ?? "--", note: "Seven days after support", icon: Clock3, tone: "text-amber-700 bg-amber-50" },
+    { label: "Suppressed", value: dashboard?.audience.suppressed ?? "--", note: "Opt-outs and service blocks", icon: CircleSlash2, tone: "text-red-700 bg-red-50" },
+    { label: "At 30-day cap", value: dashboard?.audience.at30DayCap ?? "--", note: "Maximum two messages", icon: ShieldCheck, tone: "text-slate-700 bg-slate-100" },
+  ];
+  const gates = [
+    { label: "Shopify consent sync", detail: "WhatsApp, phone-marketing and support consent evidence", passed: settings.shopify_connected === true },
+    { label: "WhatsApp sender connected", detail: "Existing easyTag sender, isolated workflow", passed: settings.whatsapp_connected === true },
+    { label: "Marketing templates approved", detail: "Meta approval is required before sending", passed: settings.meta_templates_approved === true },
+    { label: "Dry-run completed", detail: "Internal test and pilot evidence recorded", passed: !isDryRun },
+    { label: "Send endpoint armed", detail: "Final live release switch", passed: isArmed },
+  ];
+  const passedGateCount = gates.filter((gate) => gate.passed).length;
+  const liveReady = isEnabled && !isDryRun && isArmed && passedGateCount === gates.length;
+
+  const refreshData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-marketing-dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-marketing-campaigns"] }),
+    ]);
+  };
+
   return (
     <div className="min-h-screen bg-[#f6f7f8] text-slate-950">
       <header className="border-b border-slate-200 bg-white">
@@ -86,7 +116,7 @@ function Marketing() {
               <div className="flex items-center gap-2">
                 <h1 className="truncate text-xl font-semibold">WhatsApp marketing</h1>
                 <Badge className="border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50" variant="outline">
-                  Staging
+                  {liveReady ? "Live" : "Staging"}
                 </Badge>
               </div>
               <p className="truncate text-sm text-slate-500">easyTag campaign control</p>
@@ -96,7 +126,7 @@ function Marketing() {
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button aria-label="Refresh campaign data" className="h-9 w-9" size="icon" variant="outline">
+                <Button aria-label="Refresh campaign data" className="h-9 w-9" onClick={refreshData} size="icon" variant="outline">
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -118,14 +148,24 @@ function Marketing() {
             <p className="text-sm font-medium text-[#d95700]">Pilot workspace</p>
             <h2 className="mt-1 text-2xl font-semibold">Campaigns are safely locked</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-              The interface is ready for the staging connection. Live sending stays unavailable until consent sync, satisfaction checks, and test delivery all pass.
+              Shopify consent, support satisfaction, cooling periods and frequency limits are checked again immediately before every send.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
             <LockKeyhole className="h-4 w-4" />
-            No live send endpoint
+            {liveReady ? "Live send armed" : "Live sending locked"}
           </div>
         </section>
+
+        {dashboardQuery.isError ? (
+          <div className="mb-5 flex items-start gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">Campaign data is not available yet</p>
+              <p className="mt-1 text-amber-800">The dashboard remains locked until the isolated database setup and first Shopify sync complete.</p>
+            </div>
+          </div>
+        ) : null}
 
         <Tabs defaultValue="overview" className="space-y-5">
           <TabsList className="grid h-10 w-full grid-cols-3 rounded-[8px] bg-slate-200/70 p-1 sm:w-[420px]">
@@ -166,11 +206,11 @@ function Marketing() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 id="next-campaign-heading" className="font-semibold">Next pilot campaign</h3>
-                      <Badge className="border-slate-300 bg-white text-slate-700" variant="outline">Unarmed</Badge>
+                      <Badge className="border-slate-300 bg-white text-slate-700" variant="outline">{nextCampaign?.status || "Unarmed"}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-slate-500">A small cohort only after every gate passes.</p>
                   </div>
-                  <Button className="gap-2 bg-[#ff6600] hover:bg-[#e85d00]" disabled>
+                  <Button className="gap-2 bg-[#ff6600] hover:bg-[#e85d00]" disabled={!liveReady || !nextCampaign}>
                     <CalendarClock className="h-4 w-4" />
                     Schedule pilot
                   </Button>
@@ -180,27 +220,27 @@ function Marketing() {
                   <div>
                     <p className="text-xs font-semibold uppercase text-[#d95700]">Message preview</p>
                     <div className="mt-3 max-w-xl rounded-[8px] rounded-tl-none bg-[#e7f8ed] px-4 py-3 text-sm leading-6 text-slate-800">
-                      That small panic when your wallet is not where you left it? We made something for that. See how easyTag keeps the important bit findable.
-                      <div className="mt-3 text-[#087b41] underline">See the tracker card</div>
+                      {nextCampaign?.message_preview || "That small panic when your wallet is not where you left it? We made something for that. See how easyTag keeps the important bit findable."}
+                      <div className="mt-3 text-[#087b41] underline">{nextCampaign?.button_label || "See the tracker card"}</div>
                       <p className="mt-3 text-xs text-slate-500">Manage WhatsApp preferences</p>
                     </div>
                   </div>
                   <dl className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                       <dt className="text-slate-500">Cohort</dt>
-                      <dd className="font-medium">25 people</dd>
+                      <dd className="font-medium">{nextCampaign?.cohort_size || settings.default_cohort_size || 25} people</dd>
                     </div>
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                       <dt className="text-slate-500">Frequency</dt>
-                      <dd className="font-medium">1 this week</dd>
+                      <dd className="font-medium">Max 2 / 30 days</dd>
                     </div>
                     <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
                       <dt className="text-slate-500">Offer</dt>
-                      <dd className="font-medium">None</dd>
+                      <dd className="font-medium">{nextCampaign?.campaign_kind === "private_offer" ? "Private offer" : nextCampaign?.campaign_kind === "free_gift" ? "Free gift" : "None"}</dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-slate-500">Template</dt>
-                      <dd className="font-medium">Pending Meta</dd>
+                      <dd className="font-medium">{nextCampaign?.template_name || "Pending Meta"}</dd>
                     </div>
                   </dl>
                 </div>
@@ -209,13 +249,13 @@ function Marketing() {
               <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="release-gates-heading">
                 <div className="flex items-center justify-between gap-3">
                   <h3 id="release-gates-heading" className="font-semibold">Release gates</h3>
-                  <span className="text-sm font-medium text-slate-500">0 / {gates.length}</span>
+                  <span className="text-sm font-medium text-slate-500">{passedGateCount} / {gates.length}</span>
                 </div>
-                <Progress className="mt-3 h-2" value={0} />
+                <Progress className="mt-3 h-2" value={(passedGateCount / gates.length) * 100} />
                 <div className="mt-4 divide-y divide-slate-100">
                   {gates.map((gate) => (
                     <div key={gate.label} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                      <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 border-slate-300" />
+                      <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-2", gate.passed ? "border-emerald-500 bg-emerald-500" : "border-slate-300")} />
                       <div>
                         <p className="text-sm font-medium">{gate.label}</p>
                         <p className="mt-0.5 text-xs leading-5 text-slate-500">{gate.detail}</p>

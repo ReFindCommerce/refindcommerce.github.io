@@ -1,0 +1,121 @@
+{
+  "updatedAt": "2026-08-10T12:53:10.726Z",
+  "createdAt": "2026-08-10T12:13:21.788Z",
+  "id": "cKNMZ5gYIbMHV3Pp",
+  "name": "easyTag WhatsApp Marketing - Schema Setup",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "easytag-wa-marketing-schema-setup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d124a299-6f3c-4f58-a6ef-6955ddc479ba",
+      "name": "Setup webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "4fab1e6d-3e2b-4f21-a3fc-8de30531b269"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create extension if not exists pgcrypto;\n\ncreate table if not exists public.wa_marketing_contacts (\n  phone_e164 text primary key check (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),\n  preference_token uuid not null default gen_random_uuid() unique,\n  shopify_customer_id text unique,\n  first_name text,\n  last_name text,\n  locale text,\n  country_code text,\n  consent_state text not null default 'NEVER_SUBSCRIBED'\n    check (consent_state in ('NEVER_SUBSCRIBED', 'PENDING', 'SUBSCRIBED', 'UNSUBSCRIBED', 'REDACTED')),\n  consent_updated_at timestamptz,\n  consent_collected_from text,\n  consent_basis text not null default 'none'\n    check (consent_basis in ('none', 'shopify_whatsapp', 'shopify_sms', 'support_marketing_optin')),\n  sms_marketing_state text,\n  sms_marketing_updated_at timestamptz,\n  sms_marketing_collected_from text,\n  source text not null default 'shopify',\n  support_status text not null default 'no_history'\n    check (support_status in ('no_history', 'satisfied', 'open', 'unsatisfied', 'unknown')),\n  support_evidence text,\n  last_support_at timestamptz,\n  cooling_until timestamptz,\n  opted_out_at timestamptz,\n  tags jsonb not null default '[]'::jsonb,\n  last_shopify_sync_at timestamptz,\n  last_inbox_sync_at timestamptz,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now()\n);\n\ncreate table if not exists public.wa_marketing_campaigns (\n  id uuid primary key default gen_random_uuid(),\n  name text not null,\n  campaign_kind text not null default 'useful_story'\n    check (campaign_kind in ('useful_story', 'private_offer', 'free_gift')),\n  template_name text not null,\n  template_language text not null default 'en_GB',\n  template_components jsonb not null default '[]'::jsonb,\n  message_preview text not null,\n  button_label text,\n  button_url text,\n  featured_product_id text,\n  featured_product_handle text,\n  featured_product_title text,\n  scheduled_for timestamptz,\n  timezone text not null default 'Europe/London',\n  cohort_size integer not null default 25 check (cohort_size between 1 and 100),\n  status text not null default 'draft'\n    check (status in ('draft', 'approved', 'scheduled', 'running', 'paused', 'completed', 'blocked', 'failed')),\n  automatic boolean not null default false,\n  approved_at timestamptz,\n  approved_by text,\n  blocked_reason text,\n  eligibility_snapshot jsonb not null default '{}'::jsonb,\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now()\n);\n\ncreate table if not exists public.wa_marketing_recipients (\n  id uuid primary key default gen_random_uuid(),\n  campaign_id uuid not null references public.wa_marketing_campaigns(id) on delete cascade,\n  phone_e164 text not null references public.wa_marketing_contacts(phone_e164),\n  shopify_customer_id text,\n  eligibility_status text not null default 'queued'\n    check (eligibility_status in ('queued', 'eligible', 'blocked')),\n  blocked_reasons text[] not null default '{}',\n  selected_at timestamptz not null default now(),\n  send_status text not null default 'queued'\n    check (send_status in ('queued', 'sending', 'sent', 'delivered', 'read', 'failed', 'skipped')),\n  provider_message_id text,\n  sent_at timestamptz,\n  delivered_at timestamptz,\n  read_at timestamptz,\n  clicked_at timestamptz,\n  attributed_order_id text,\n  error_code text,\n  error_message text,\n  updated_at timestamptz not null default now(),\n  unique (campaign_id, phone_e164)\n);\n\ncreate index if not exists wa_marketing_recipients_phone_sent_idx\n  on public.wa_marketing_recipients (phone_e164, sent_at desc);\n\ncreate index if not exists wa_marketing_campaigns_schedule_idx\n  on public.wa_marketing_campaigns (status, scheduled_for);\n\nalter table public.wa_marketing_campaigns\n  add column if not exists template_components jsonb not null default '[]'::jsonb;\n\nalter table public.wa_marketing_contacts\n  add column if not exists preference_token uuid not null default gen_random_uuid(),\n  add column if not exists consent_basis text not null default 'none',\n  add column if not exists sms_marketing_state text,\n  add column if not exists sms_marketing_updated_at timestamptz,\n  add column if not exists sms_marketing_collected_from text;\n\ndo $$\nbegin\n  if not exists (\n    select 1 from pg_constraint where conname = 'wa_marketing_contacts_consent_basis_check'\n  ) then\n    alter table public.wa_marketing_contacts\n      add constraint wa_marketing_contacts_consent_basis_check\n      check (consent_basis in ('none', 'shopify_whatsapp', 'shopify_sms', 'support_marketing_optin'));\n  end if;\nend\n$$;\n\ncreate unique index if not exists wa_marketing_contacts_preference_token_idx\n  on public.wa_marketing_contacts (preference_token);\n\ncreate table if not exists public.wa_marketing_suppressions (\n  phone_e164 text primary key check (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),\n  reason text not null,\n  source text not null default 'whatsapp',\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now()\n);\n\ncreate table if not exists public.wa_marketing_events (\n  id uuid primary key default gen_random_uuid(),\n  campaign_id uuid references public.wa_marketing_campaigns(id) on delete set null,\n  recipient_id uuid references public.wa_marketing_recipients(id) on delete set null,\n  phone_e164 text,\n  provider_message_id text,\n  event_type text not null,\n  payload jsonb not null default '{}'::jsonb,\n  occurred_at timestamptz not null default now()\n);\n\ncreate table if not exists public.wa_marketing_settings (\n  key text primary key,\n  value jsonb not null,\n  updated_at timestamptz not null default now()\n);\n\ninsert into public.wa_marketing_settings (key, value) values\n  ('automation_enabled', 'false'::jsonb),\n  ('dry_run', 'true'::jsonb),\n  ('send_endpoint_armed', 'false'::jsonb),\n  ('shopify_connected', 'false'::jsonb),\n  ('whatsapp_connected', 'true'::jsonb),\n  ('meta_templates_approved', 'false'::jsonb),\n  ('max_messages_30d', '2'::jsonb),\n  ('support_cooling_days', '7'::jsonb),\n  ('default_cohort_size', '25'::jsonb)\non conflict (key) do nothing;\n\nupdate public.wa_marketing_settings\nset value = 'true'::jsonb, updated_at = now()\nwhere key = 'meta_templates_approved';\n\ninsert into public.wa_marketing_campaigns (\n  name,\n  campaign_kind,\n  template_name,\n  template_language,\n  template_components,\n  message_preview,\n  button_label,\n  button_url,\n  featured_product_handle,\n  featured_product_title,\n  cohort_size,\n  status,\n  automatic\n)\nselect\n  'easyTag WhatsApp Pilot 01',\n  'useful_story',\n  'easytag_travel_story_v1',\n  'en_GB',\n  '[\n    {\"type\":\"button\",\"sub_type\":\"url\",\"index\":\"0\",\"parameters\":[{\"type\":\"text\",\"text\":\"products/easytag-apple-wallet-tracker\"}]},\n    {\"type\":\"button\",\"sub_type\":\"url\",\"index\":\"1\",\"parameters\":[{\"type\":\"text\",\"text\":\"__PREFERENCE_TOKEN__\"}]}\n  ]'::jsonb,\n  'That horrible half-second when your wallet is not where you left it. Most of the time it is nearby. The panic does not know that.',\n  'See the card',\n  'https://easytag.app/products/easytag-apple-wallet-tracker',\n  'easytag-apple-wallet-tracker',\n  'Apple Card Tracker',\n  25,\n  'draft',\n  false\nwhere not exists (\n  select 1 from public.wa_marketing_campaigns where name = 'easyTag WhatsApp Pilot 01'\n);\n\ncreate or replace function public.wa_marketing_setting_number(p_key text, p_default numeric)\nreturns numeric\nlanguage sql\nstable\nsecurity definer\nset search_path = public\nas $$\n  select coalesce((select (value #>> '{}')::numeric from public.wa_marketing_settings where key = p_key), p_default)\n$$;\n\ncreate or replace function public.wa_marketing_block_reasons(\n  p_phone_e164 text,\n  p_now timestamptz default now()\n)\nreturns text[]\nlanguage plpgsql\nstable\nsecurity definer\nset search_path = public\nas $$\ndeclare\n  contact public.wa_marketing_contacts%rowtype;\n  reasons text[] := '{}';\n  cooling_days integer := public.wa_marketing_setting_number('support_cooling_days', 7)::integer;\n  max_messages integer := public.wa_marketing_setting_number('max_messages_30d', 2)::integer;\n  recent_sends integer := 0;\nbegin\n  select * into contact from public.wa_marketing_contacts where phone_e164 = p_phone_e164;\n\n  if not found then\n    return array['contact_missing'];\n  end if;\n\n  if contact.consent_state <> 'SUBSCRIBED' then\n    reasons := array_append(reasons, 'whatsapp_consent_not_subscribed');\n  end if;\n\n  if contact.opted_out_at is not null or exists (\n    select 1 from public.wa_marketing_suppressions s where s.phone_e164 = contact.phone_e164\n  ) then\n    reasons := array_append(reasons, 'suppressed_or_opted_out');\n  end if;\n\n  if contact.support_status in ('open', 'unsatisfied', 'unknown') then\n    reasons := array_append(reasons, 'support_not_safely_resolved');\n  end if;\n\n  if contact.cooling_until is not null and contact.cooling_until > p_now then\n    reasons := array_append(reasons, 'support_cooling_period');\n  elsif contact.last_support_at is not null\n    and contact.last_support_at > p_now - make_interval(days => cooling_days) then\n    reasons := array_append(reasons, 'support_cooling_period');\n  end if;\n\n  select count(*) into recent_sends\n  from public.wa_marketing_recipients r\n  where r.phone_e164 = contact.phone_e164\n    and r.send_status in ('sent', 'delivered', 'read')\n    and r.sent_at >= p_now - interval '30 days';\n\n  if recent_sends >= max_messages then\n    reasons := array_append(reasons, 'rolling_30_day_cap');\n  end if;\n\n  return reasons;\nend;\n$$;\n\ncreate or replace function public.wa_marketing_select_recipients(p_campaign_id uuid)\nreturns table (recipient_id uuid, phone_e164 text, blocked_reasons text[])\nlanguage plpgsql\nsecurity definer\nset search_path = public\nas $$\ndeclare\n  campaign public.wa_marketing_campaigns%rowtype;\nbegin\n  select * into campaign from public.wa_marketing_campaigns where id = p_campaign_id for update;\n  if not found then raise exception 'Campaign not found'; end if;\n  if campaign.status not in ('approved', 'scheduled') then\n    raise exception 'Campaign must be approved or scheduled before cohort selection';\n  end if;\n\n  insert into public.wa_marketing_recipients (\n    campaign_id,\n    phone_e164,\n    shopify_customer_id,\n    eligibility_status,\n    blocked_reasons,\n    send_status\n  )\n  select\n    campaign.id,\n    c.phone_e164,\n    c.shopify_customer_id,\n    'eligible',\n    '{}',\n    'queued'\n  from public.wa_marketing_contacts c\n  where cardinality(public.wa_marketing_block_reasons(c.phone_e164, now())) = 0\n  order by md5(c.phone_e164 || campaign.id::text)\n  limit campaign.cohort_size\n  on conflict (campaign_id, phone_e164) do nothing;\n\n  return query\n  select r.id, r.phone_e164, r.blocked_reasons\n  from public.wa_marketing_recipients r\n  where r.campaign_id = campaign.id\n  order by r.selected_at, r.id;\nend;\n$$;\n\ncreate or replace function public.get_wa_marketing_dashboard()\nreturns jsonb\nlanguage sql\nstable\nsecurity definer\nset search_path = public\nas $$\n  with contact_health as (\n    select\n      count(*) filter (where cardinality(public.wa_marketing_block_reasons(c.phone_e164, now())) = 0) as eligible_now,\n      count(*) filter (where 'support_cooling_period' = any(public.wa_marketing_block_reasons(c.phone_e164, now()))) as cooling_period,\n      count(*) filter (where 'suppressed_or_opted_out' = any(public.wa_marketing_block_reasons(c.phone_e164, now()))) as suppressed,\n      count(*) filter (where 'rolling_30_day_cap' = any(public.wa_marketing_block_reasons(c.phone_e164, now()))) as at_30_day_cap\n    from public.wa_marketing_contacts c\n  ), next_campaign as (\n    select to_jsonb(c) - 'eligibility_snapshot' as campaign\n    from public.wa_marketing_campaigns c\n    where c.status in ('approved', 'scheduled', 'running')\n    order by c.scheduled_for nulls last, c.created_at\n    limit 1\n  ), settings as (\n    select jsonb_object_agg(key, value) as values from public.wa_marketing_settings\n  )\n  select jsonb_build_object(\n    'audience', jsonb_build_object(\n      'eligibleNow', coalesce(h.eligible_now, 0),\n      'coolingPeriod', coalesce(h.cooling_period, 0),\n      'suppressed', coalesce(h.suppressed, 0),\n      'at30DayCap', coalesce(h.at_30_day_cap, 0)\n    ),\n    'nextCampaign', n.campaign,\n    'settings', coalesce(s.values, '{}'::jsonb),\n    'updatedAt', now()\n  )\n  from contact_health h\n  cross join settings s\n  left join next_campaign n on true\n$$;\n\ncreate or replace function public.get_wa_marketing_campaigns()\nreturns table (\n  id uuid,\n  name text,\n  campaign_kind text,\n  template_name text,\n  template_language text,\n  message_preview text,\n  button_label text,\n  button_url text,\n  featured_product_title text,\n  scheduled_for timestamptz,\n  timezone text,\n  cohort_size integer,\n  status text,\n  automatic boolean,\n  approved_at timestamptz,\n  blocked_reason text,\n  created_at timestamptz,\n  updated_at timestamptz\n)\nlanguage sql\nstable\nsecurity definer\nset search_path = public\nas $$\n  select\n    c.id, c.name, c.campaign_kind, c.template_name, c.template_language,\n    c.message_preview, c.button_label, c.button_url, c.featured_product_title,\n    c.scheduled_for, c.timezone, c.cohort_size, c.status, c.automatic,\n    c.approved_at, c.blocked_reason, c.created_at, c.updated_at\n  from public.wa_marketing_campaigns c\n  order by c.created_at desc\n  limit 50\n$$;\n\ncreate or replace function public.get_wa_marketing_preference(p_token uuid)\nreturns jsonb\nlanguage sql\nstable\nsecurity definer\nset search_path = public\nas $$\n  select case\n    when c.phone_e164 is null then jsonb_build_object('valid', false, 'optedOut', false)\n    else jsonb_build_object(\n      'valid', true,\n      'optedOut', c.opted_out_at is not null or exists (\n        select 1 from public.wa_marketing_suppressions s where s.phone_e164 = c.phone_e164\n      )\n    )\n  end\n  from (select 1) seed\n  left join public.wa_marketing_contacts c on c.preference_token = p_token\n$$;\n\ncreate or replace function public.wa_marketing_opt_out(p_token uuid)\nreturns jsonb\nlanguage plpgsql\nsecurity definer\nset search_path = public\nas $$\ndeclare\n  contact_phone text;\nbegin\n  select phone_e164 into contact_phone\n  from public.wa_marketing_contacts\n  where preference_token = p_token\n  for update;\n\n  if contact_phone is null then\n    return jsonb_build_object('success', false, 'reason', 'invalid_token');\n  end if;\n\n  insert into public.wa_marketing_suppressions (phone_e164, reason, source, created_at, updated_at)\n  values (contact_phone, 'Customer opted out on the WhatsApp preferences page', 'preference_page', now(), now())\n  on conflict (phone_e164) do update\n    set reason = excluded.reason, source = excluded.source, updated_at = now();\n\n  update public.wa_marketing_contacts\n  set opted_out_at = coalesce(opted_out_at, now()), consent_state = 'UNSUBSCRIBED', updated_at = now()\n  where phone_e164 = contact_phone;\n\n  insert into public.wa_marketing_events (phone_e164, event_type, payload, occurred_at)\n  values (contact_phone, 'preference_page_optout', '{}'::jsonb, now());\n\n  return jsonb_build_object('success', true);\nend;\n$$;\n\nalter table public.wa_marketing_contacts enable row level security;\nalter table public.wa_marketing_campaigns enable row level security;\nalter table public.wa_marketing_recipients enable row level security;\nalter table public.wa_marketing_suppressions enable row level security;\nalter table public.wa_marketing_events enable row level security;\nalter table public.wa_marketing_settings enable row level security;\n\nrevoke all on public.wa_marketing_contacts from anon, authenticated;\nrevoke all on public.wa_marketing_campaigns from anon, authenticated;\nrevoke all on public.wa_marketing_recipients from anon, authenticated;\nrevoke all on public.wa_marketing_suppressions from anon, authenticated;\nrevoke all on public.wa_marketing_events from anon, authenticated;\nrevoke all on public.wa_marketing_settings from anon, authenticated;\n\ngrant execute on function public.get_wa_marketing_dashboard() to anon, authenticated;\ngrant execute on function public.get_wa_marketing_campaigns() to anon, authenticated;\ngrant execute on function public.get_wa_marketing_preference(uuid) to anon, authenticated;\ngrant execute on function public.wa_marketing_opt_out(uuid) to anon, authenticated;\n",
+        "options": {}
+      },
+      "id": "c0c999c7-80c9-4290-9d41-e33574f8ad95",
+      "name": "Apply isolated schema",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, setup: \"easyTag WhatsApp marketing schema\" } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d4aac34f-0401-4f33-a901-0353a39b67c5",
+      "name": "Setup complete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Setup webhook": {
+      "main": [
+        [
+          {
+            "node": "Apply isolated schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply isolated schema": {
+      "main": [
+        [
+          {
+            "node": "Setup complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "2f6d5fce-2b0e-4411-943d-51ad873674cc",
+  "activeVersionId": null,
+  "versionCounter": 24,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-10T12:13:21.791Z",
+      "createdAt": "2026-08-10T12:13:21.791Z",
+      "role": "workflow:owner",
+      "workflowId": "cKNMZ5gYIbMHV3Pp",
+      "projectId": "AcXDzQXiTSvBmfxA",
+      "project": {
+        "updatedAt": "2026-02-11T11:38:24.768Z",
+        "createdAt": "2026-02-09T17:52:28.408Z",
+        "id": "AcXDzQXiTSvBmfxA",
+        "name": "Tom Pergam <tom.pegram@easytag.app>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

@@ -1,0 +1,752 @@
+{
+  "updatedAt": "2026-08-10T12:51:00.889Z",
+  "createdAt": "2026-08-10T12:51:00.889Z",
+  "id": "AC5RVbAI0spGUPL8",
+  "name": "easyTag WhatsApp Marketing - Scheduler",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wa-send-schedule",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wa-send-gate",
+      "name": "Check hard send gates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "update public.wa_marketing_recipients\n    set send_status = 'failed', error_code = 'stale_sending', error_message = 'Recovered after 20 minutes in sending state', updated_at = now()\n    where send_status = 'sending' and updated_at < now() - interval '20 minutes';\n\n  select c.id as campaign_id\n  from public.wa_marketing_campaigns c\n  where c.status = 'scheduled'\n    and c.scheduled_for <= now()\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'automation_enabled'), false)\n    and not coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'dry_run'), true)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'send_endpoint_armed'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'shopify_connected'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'whatsapp_connected'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'meta_templates_approved'), false)\n  order by c.scheduled_for\n  limit 2;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "wa-send-filter-campaigns",
+      "name": "Filter due campaigns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        390,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => Boolean(item.json.campaign_id));"
+      }
+    },
+    {
+      "id": "wa-send-select-code",
+      "name": "Build cohort selection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const id = String($json.campaign_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid campaign id');\nreturn [{ json: { sql: \"with selected as (select * from public.wa_marketing_select_recipients('\" + id + \"'::uuid)) select r.id as recipient_id, r.phone_e164, c.id as campaign_id, c.template_name, c.template_language, c.template_components from selected s join public.wa_marketing_recipients r on r.id = s.recipient_id join public.wa_marketing_campaigns c on c.id = r.campaign_id where r.send_status = 'queued';\" } }];"
+      }
+    },
+    {
+      "id": "wa-send-select",
+      "name": "Select safe recipients",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        780,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "wa-send-filter-recipients",
+      "name": "Filter selected recipients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        910,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => Boolean(item.json.recipient_id && item.json.phone_e164));"
+      }
+    },
+    {
+      "id": "wa-send-recheck-code",
+      "name": "Build final eligibility check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
+      }
+    },
+    {
+      "id": "wa-send-recheck",
+      "name": "Final eligibility check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1300,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "wa-send-filter-ready",
+      "name": "Filter send-ready recipients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1430,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => Boolean(item.json.recipient_id && item.json.phone_e164));"
+      }
+    },
+    {
+      "id": "wa-send-template",
+      "name": "Send approved easyTag template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/953305754533805/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "whatsAppApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token)),\n    },\n  }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "whatsAppApi": {
+          "id": "kAmVxFJKk1AFYszb",
+          "name": "easytag"
+        }
+      }
+    },
+    {
+      "id": "wa-send-audit-code",
+      "name": "Build send audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst recipientId = String($('Final eligibility check').item.json.recipient_id || '').replace(/'/g, \"''\");\nconst providerId = String(response.messages?.[0]?.id || '').replace(/'/g, \"''\");\nif (!providerId) throw new Error('WhatsApp send did not return a message id');\nreturn [{ json: { sql: \"with updated as (update public.wa_marketing_recipients set send_status = 'sent', provider_message_id = '\" + providerId + \"', sent_at = now(), updated_at = now() where id = '\" + recipientId + \"'::uuid returning id, campaign_id, phone_e164) insert into public.wa_marketing_events (campaign_id, recipient_id, phone_e164, provider_message_id, event_type, payload, occurred_at) select campaign_id, id, phone_e164, '\" + providerId + \"', 'sent', '{}'::jsonb, now() from updated;\" } }];"
+      }
+    },
+    {
+      "id": "wa-send-audit",
+      "name": "Record successful send",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2080,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Check hard send gates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check hard send gates": {
+      "main": [
+        [
+          {
+            "node": "Filter due campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter due campaigns": {
+      "main": [
+        [
+          {
+            "node": "Build cohort selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build cohort selection": {
+      "main": [
+        [
+          {
+            "node": "Select safe recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select safe recipients": {
+      "main": [
+        [
+          {
+            "node": "Filter selected recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter selected recipients": {
+      "main": [
+        [
+          {
+            "node": "Build final eligibility check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build final eligibility check": {
+      "main": [
+        [
+          {
+            "node": "Final eligibility check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final eligibility check": {
+      "main": [
+        [
+          {
+            "node": "Filter send-ready recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter send-ready recipients": {
+      "main": [
+        [
+          {
+            "node": "Send approved easyTag template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send approved easyTag template": {
+      "main": [
+        [
+          {
+            "node": "Build send audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build send audit": {
+      "main": [
+        [
+          {
+            "node": "Record successful send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "staticData": {
+    "node:Every 5 minutes": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "9720f5dd-45ce-41ef-8213-0b022646d5f8",
+  "activeVersionId": "9720f5dd-45ce-41ef-8213-0b022646d5f8",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-10T12:51:00.890Z",
+      "createdAt": "2026-08-10T12:51:00.890Z",
+      "role": "workflow:owner",
+      "workflowId": "AC5RVbAI0spGUPL8",
+      "projectId": "AcXDzQXiTSvBmfxA",
+      "project": {
+        "updatedAt": "2026-02-11T11:38:24.768Z",
+        "createdAt": "2026-02-09T17:52:28.408Z",
+        "id": "AcXDzQXiTSvBmfxA",
+        "name": "Tom Pergam <tom.pegram@easytag.app>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-08-10T12:51:00.892Z",
+    "createdAt": "2026-08-10T12:51:00.892Z",
+    "versionId": "9720f5dd-45ce-41ef-8213-0b022646d5f8",
+    "workflowId": "AC5RVbAI0spGUPL8",
+    "nodes": [
+      {
+        "id": "wa-send-schedule",
+        "name": "Every 5 minutes",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "*/5 * * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "wa-send-gate",
+        "name": "Check hard send gates",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          260,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "update public.wa_marketing_recipients\n    set send_status = 'failed', error_code = 'stale_sending', error_message = 'Recovered after 20 minutes in sending state', updated_at = now()\n    where send_status = 'sending' and updated_at < now() - interval '20 minutes';\n\n  select c.id as campaign_id\n  from public.wa_marketing_campaigns c\n  where c.status = 'scheduled'\n    and c.scheduled_for <= now()\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'automation_enabled'), false)\n    and not coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'dry_run'), true)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'send_endpoint_armed'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'shopify_connected'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'whatsapp_connected'), false)\n    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'meta_templates_approved'), false)\n  order by c.scheduled_for\n  limit 2;",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "wa-send-filter-campaigns",
+        "name": "Filter due campaigns",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          390,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return $input.all().filter((item) => Boolean(item.json.campaign_id));"
+        }
+      },
+      {
+        "id": "wa-send-select-code",
+        "name": "Build cohort selection",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const id = String($json.campaign_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Invalid campaign id');\nreturn [{ json: { sql: \"with selected as (select * from public.wa_marketing_select_recipients('\" + id + \"'::uuid)) select r.id as recipient_id, r.phone_e164, c.id as campaign_id, c.template_name, c.template_language, c.template_components from selected s join public.wa_marketing_recipients r on r.id = s.recipient_id join public.wa_marketing_campaigns c on c.id = r.campaign_id where r.send_status = 'queued';\" } }];"
+        }
+      },
+      {
+        "id": "wa-send-select",
+        "name": "Select safe recipients",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          780,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql }}",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "wa-send-filter-recipients",
+        "name": "Filter selected recipients",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          910,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return $input.all().filter((item) => Boolean(item.json.recipient_id && item.json.phone_e164));"
+        }
+      },
+      {
+        "id": "wa-send-recheck-code",
+        "name": "Build final eligibility check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
+        }
+      },
+      {
+        "id": "wa-send-recheck",
+        "name": "Final eligibility check",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1300,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql }}",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "wa-send-filter-ready",
+        "name": "Filter send-ready recipients",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1430,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return $input.all().filter((item) => Boolean(item.json.recipient_id && item.json.phone_e164));"
+        }
+      },
+      {
+        "id": "wa-send-template",
+        "name": "Send approved easyTag template",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1560,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://graph.facebook.com/v23.0/953305754533805/messages",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "whatsAppApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token)),\n    },\n  }) }}",
+          "options": {}
+        },
+        "credentials": {
+          "whatsAppApi": {
+            "id": "kAmVxFJKk1AFYszb",
+            "name": "easytag"
+          }
+        }
+      },
+      {
+        "id": "wa-send-audit-code",
+        "name": "Build send audit",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const response = $input.first().json;\nconst recipientId = String($('Final eligibility check').item.json.recipient_id || '').replace(/'/g, \"''\");\nconst providerId = String(response.messages?.[0]?.id || '').replace(/'/g, \"''\");\nif (!providerId) throw new Error('WhatsApp send did not return a message id');\nreturn [{ json: { sql: \"with updated as (update public.wa_marketing_recipients set send_status = 'sent', provider_message_id = '\" + providerId + \"', sent_at = now(), updated_at = now() where id = '\" + recipientId + \"'::uuid returning id, campaign_id, phone_e164) insert into public.wa_marketing_events (campaign_id, recipient_id, phone_e164, provider_message_id, event_type, payload, occurred_at) select campaign_id, id, phone_e164, '\" + providerId + \"', 'sent', '{}'::jsonb, now() from updated;\" } }];"
+        }
+      },
+      {
+        "id": "wa-send-audit",
+        "name": "Record successful send",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2080,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql }}",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Every 5 minutes": {
+        "main": [
+          [
+            {
+              "node": "Check hard send gates",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check hard send gates": {
+        "main": [
+          [
+            {
+              "node": "Filter due campaigns",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter due campaigns": {
+        "main": [
+          [
+            {
+              "node": "Build cohort selection",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build cohort selection": {
+        "main": [
+          [
+            {
+              "node": "Select safe recipients",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select safe recipients": {
+        "main": [
+          [
+            {
+              "node": "Filter selected recipients",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter selected recipients": {
+        "main": [
+          [
+            {
+              "node": "Build final eligibility check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build final eligibility check": {
+        "main": [
+          [
+            {
+              "node": "Final eligibility check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Final eligibility check": {
+        "main": [
+          [
+            {
+              "node": "Filter send-ready recipients",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter send-ready recipients": {
+        "main": [
+          [
+            {
+              "node": "Send approved easyTag template",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send approved easyTag template": {
+        "main": [
+          [
+            {
+              "node": "Build send audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build send audit": {
+        "main": [
+          [
+            {
+              "node": "Record successful send",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Tom Pergam",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-08-10T12:51:01.278Z",
+        "id": 544,
+        "workflowId": "AC5RVbAI0spGUPL8",
+        "versionId": "9720f5dd-45ce-41ef-8213-0b022646d5f8",
+        "event": "activated",
+        "userId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    ]
+  }
+}

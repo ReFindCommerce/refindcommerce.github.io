@@ -1,0 +1,548 @@
+{
+  "updatedAt": "2026-08-10T12:51:26.253Z",
+  "createdAt": "2026-08-10T12:42:34.878Z",
+  "id": "cbRyEdjtcmZitq5d",
+  "name": "easyTag WhatsApp Marketing - Opt-out Sync",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wa-optout-schedule",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wa-optout-token",
+      "name": "Get opt-out Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "jspij3ockguA7sla",
+          "name": "easyTag Shopify Marketing Token Exchange"
+        }
+      }
+    },
+    {
+      "id": "wa-optout-detect",
+      "name": "Detect WhatsApp opt-outs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        520,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "with optouts as (\n    select distinct\n      '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') as phone_e164\n    from public.inbox_messages\n    where lower(channel) = 'whatsapp'\n      and direction = 'inbound'\n      and upper(trim(regexp_replace(coalesce(user_message, ''), '[^A-Za-z ]', '', 'g')))\n        in ('STOP', 'UNSUBSCRIBE', 'OPT OUT', 'OPTOUT', 'CANCEL', 'END', 'QUIT')\n      and regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n    union\n    select s.phone_e164\n    from public.wa_marketing_suppressions s\n    where not exists (\n      select 1 from public.wa_marketing_events e\n      where e.phone_e164 = s.phone_e164 and e.event_type = 'shopify_optout_synced'\n    )\n  ), saved as (\n    insert into public.wa_marketing_suppressions (phone_e164, reason, source, created_at, updated_at)\n    select phone_e164, 'Customer WhatsApp opt-out message', 'whatsapp', now(), now()\n    from optouts\n    on conflict (phone_e164) do update set reason = excluded.reason, source = excluded.source, updated_at = now()\n    returning phone_e164\n  ), updated_contacts as (\n    update public.wa_marketing_contacts c\n    set opted_out_at = coalesce(c.opted_out_at, now()),\n        consent_state = 'UNSUBSCRIBED',\n        updated_at = now()\n    from saved\n    where c.phone_e164 = saved.phone_e164\n    returning c.phone_e164, c.shopify_customer_id\n  )\n  select u.phone_e164, u.shopify_customer_id\n  from updated_contacts u\n  where u.shopify_customer_id is not null\n    and not exists (\n      select 1 from public.wa_marketing_events e\n      where e.phone_e164 = u.phone_e164 and e.event_type = 'shopify_optout_synced'\n    );",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "wa-optout-filter",
+      "name": "Filter linked opt-outs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => Boolean(item.json.phone_e164 && item.json.shopify_customer_id));"
+      }
+    },
+    {
+      "id": "wa-optout-shopify",
+      "name": "Unsubscribe in Shopify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "identity"
+            },
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get opt-out Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: \"mutation WhatsAppOptOut($input: CustomerWhatsAppMarketingConsentUpdateInput!) {\\n    customerWhatsAppMarketingConsentUpdate(input: $input) {\\n      customerPhoneNumber { phoneNumber }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { customerId: $json.shopify_customer_id, whatsAppMarketingConsent: { state: 'UNSUBSCRIBED', updatedAt: $now.toISO() } } } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-optout-validate",
+      "name": "Validate Shopify opt-out",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerWhatsAppMarketingConsentUpdate;\nif (payload.errors?.length || result?.userErrors?.length) {\n  throw new Error('Shopify WhatsApp opt-out sync failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: {\n  phone_e164: $('Detect WhatsApp opt-outs').item.json.phone_e164,\n  shopify_customer_id: $('Detect WhatsApp opt-outs').item.json.shopify_customer_id,\n} }];"
+      }
+    },
+    {
+      "id": "wa-optout-log-code",
+      "name": "Build opt-out audit event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const phone = String($json.phone_e164 || '').replace(/'/g, \"''\");\nconst customerId = String($json.shopify_customer_id || '').replace(/'/g, \"''\");\nreturn [{ json: { sql: \"insert into public.wa_marketing_events (phone_e164, event_type, payload, occurred_at) values ('\" + phone + \"', 'shopify_optout_synced', jsonb_build_object('shopify_customer_id', '\" + customerId + \"'), now());\" } }];"
+      }
+    },
+    {
+      "id": "wa-optout-log",
+      "name": "Log Shopify opt-out",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1560,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Get opt-out Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get opt-out Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Detect WhatsApp opt-outs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect WhatsApp opt-outs": {
+      "main": [
+        [
+          {
+            "node": "Filter linked opt-outs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter linked opt-outs": {
+      "main": [
+        [
+          {
+            "node": "Unsubscribe in Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unsubscribe in Shopify": {
+      "main": [
+        [
+          {
+            "node": "Validate Shopify opt-out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Shopify opt-out": {
+      "main": [
+        [
+          {
+            "node": "Build opt-out audit event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build opt-out audit event": {
+      "main": [
+        [
+          {
+            "node": "Log Shopify opt-out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "staticData": {
+    "node:Every 15 minutes": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "187001db-0447-45f2-97ed-420202f6bd47",
+  "activeVersionId": "187001db-0447-45f2-97ed-420202f6bd47",
+  "versionCounter": 14,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-10T12:42:34.884Z",
+      "createdAt": "2026-08-10T12:42:34.884Z",
+      "role": "workflow:owner",
+      "workflowId": "cbRyEdjtcmZitq5d",
+      "projectId": "AcXDzQXiTSvBmfxA",
+      "project": {
+        "updatedAt": "2026-02-11T11:38:24.768Z",
+        "createdAt": "2026-02-09T17:52:28.408Z",
+        "id": "AcXDzQXiTSvBmfxA",
+        "name": "Tom Pergam <tom.pegram@easytag.app>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-08-10T12:51:26.254Z",
+    "createdAt": "2026-08-10T12:51:26.254Z",
+    "versionId": "187001db-0447-45f2-97ed-420202f6bd47",
+    "workflowId": "cbRyEdjtcmZitq5d",
+    "nodes": [
+      {
+        "id": "wa-optout-schedule",
+        "name": "Every 15 minutes",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "*/15 * * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "wa-optout-token",
+        "name": "Get opt-out Shopify token",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          260,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/oauth/access_token",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpCustomAuth",
+          "options": {}
+        },
+        "credentials": {
+          "httpCustomAuth": {
+            "id": "jspij3ockguA7sla",
+            "name": "easyTag Shopify Marketing Token Exchange"
+          }
+        }
+      },
+      {
+        "id": "wa-optout-detect",
+        "name": "Detect WhatsApp opt-outs",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          520,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "with optouts as (\n    select distinct\n      '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') as phone_e164\n    from public.inbox_messages\n    where lower(channel) = 'whatsapp'\n      and direction = 'inbound'\n      and upper(trim(regexp_replace(coalesce(user_message, ''), '[^A-Za-z ]', '', 'g')))\n        in ('STOP', 'UNSUBSCRIBE', 'OPT OUT', 'OPTOUT', 'CANCEL', 'END', 'QUIT')\n      and regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n    union\n    select s.phone_e164\n    from public.wa_marketing_suppressions s\n    where not exists (\n      select 1 from public.wa_marketing_events e\n      where e.phone_e164 = s.phone_e164 and e.event_type = 'shopify_optout_synced'\n    )\n  ), saved as (\n    insert into public.wa_marketing_suppressions (phone_e164, reason, source, created_at, updated_at)\n    select phone_e164, 'Customer WhatsApp opt-out message', 'whatsapp', now(), now()\n    from optouts\n    on conflict (phone_e164) do update set reason = excluded.reason, source = excluded.source, updated_at = now()\n    returning phone_e164\n  ), updated_contacts as (\n    update public.wa_marketing_contacts c\n    set opted_out_at = coalesce(c.opted_out_at, now()),\n        consent_state = 'UNSUBSCRIBED',\n        updated_at = now()\n    from saved\n    where c.phone_e164 = saved.phone_e164\n    returning c.phone_e164, c.shopify_customer_id\n  )\n  select u.phone_e164, u.shopify_customer_id\n  from updated_contacts u\n  where u.shopify_customer_id is not null\n    and not exists (\n      select 1 from public.wa_marketing_events e\n      where e.phone_e164 = u.phone_e164 and e.event_type = 'shopify_optout_synced'\n    );",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "wa-optout-filter",
+        "name": "Filter linked opt-outs",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          650,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return $input.all().filter((item) => Boolean(item.json.phone_e164 && item.json.shopify_customer_id));"
+        }
+      },
+      {
+        "id": "wa-optout-shopify",
+        "name": "Unsubscribe in Shopify",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          780,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept-Encoding",
+                "value": "identity"
+              },
+              {
+                "name": "X-Shopify-Access-Token",
+                "value": "={{ $('Get opt-out Shopify token').first().json.access_token }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ query: \"mutation WhatsAppOptOut($input: CustomerWhatsAppMarketingConsentUpdateInput!) {\\n    customerWhatsAppMarketingConsentUpdate(input: $input) {\\n      customerPhoneNumber { phoneNumber }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { customerId: $json.shopify_customer_id, whatsAppMarketingConsent: { state: 'UNSUBSCRIBED', updatedAt: $now.toISO() } } } }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "wa-optout-validate",
+        "name": "Validate Shopify opt-out",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerWhatsAppMarketingConsentUpdate;\nif (payload.errors?.length || result?.userErrors?.length) {\n  throw new Error('Shopify WhatsApp opt-out sync failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: {\n  phone_e164: $('Detect WhatsApp opt-outs').item.json.phone_e164,\n  shopify_customer_id: $('Detect WhatsApp opt-outs').item.json.shopify_customer_id,\n} }];"
+        }
+      },
+      {
+        "id": "wa-optout-log-code",
+        "name": "Build opt-out audit event",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const phone = String($json.phone_e164 || '').replace(/'/g, \"''\");\nconst customerId = String($json.shopify_customer_id || '').replace(/'/g, \"''\");\nreturn [{ json: { sql: \"insert into public.wa_marketing_events (phone_e164, event_type, payload, occurred_at) values ('\" + phone + \"', 'shopify_optout_synced', jsonb_build_object('shopify_customer_id', '\" + customerId + \"'), now());\" } }];"
+        }
+      },
+      {
+        "id": "wa-optout-log",
+        "name": "Log Shopify opt-out",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1560,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql }}",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Every 15 minutes": {
+        "main": [
+          [
+            {
+              "node": "Get opt-out Shopify token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get opt-out Shopify token": {
+        "main": [
+          [
+            {
+              "node": "Detect WhatsApp opt-outs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Detect WhatsApp opt-outs": {
+        "main": [
+          [
+            {
+              "node": "Filter linked opt-outs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter linked opt-outs": {
+        "main": [
+          [
+            {
+              "node": "Unsubscribe in Shopify",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Unsubscribe in Shopify": {
+        "main": [
+          [
+            {
+              "node": "Validate Shopify opt-out",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Shopify opt-out": {
+        "main": [
+          [
+            {
+              "node": "Build opt-out audit event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build opt-out audit event": {
+        "main": [
+          [
+            {
+              "node": "Log Shopify opt-out",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Tom Pergam",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-08-10T12:51:26.608Z",
+        "id": 552,
+        "workflowId": "cbRyEdjtcmZitq5d",
+        "versionId": "187001db-0447-45f2-97ed-420202f6bd47",
+        "event": "activated",
+        "userId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    ]
+  }
+}

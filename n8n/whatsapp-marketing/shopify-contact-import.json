@@ -1,0 +1,1032 @@
+{
+  "updatedAt": "2026-08-10T12:51:25.156Z",
+  "createdAt": "2026-08-10T12:40:20.004Z",
+  "id": "6ZqwoceF2GNrxewQ",
+  "name": "easyTag WhatsApp Marketing - Shopify Contact Import",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wa-import-schedule",
+      "name": "Daily 04:10 London",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "10 4 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wa-import-token",
+      "name": "Get import Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "jspij3ockguA7sla",
+          "name": "easyTag Shopify Marketing Token Exchange"
+        }
+      }
+    },
+    {
+      "id": "wa-import-candidates",
+      "name": "Select satisfied support contacts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        520,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select c.phone_e164\n  from public.wa_marketing_contacts c\n  where c.source = 'inbox'\n    and c.support_status = 'satisfied'\n    and c.shopify_customer_id is null\n    and c.consent_state = 'SUBSCRIBED'\n    and c.opted_out_at is null\n    and not exists (select 1 from public.wa_marketing_suppressions s where s.phone_e164 = c.phone_e164)\n  order by md5(c.phone_e164)\n  limit 50;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "wa-import-filter",
+      "name": "Filter import candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => Boolean(item.json.phone_e164));"
+      }
+    },
+    {
+      "id": "wa-import-find",
+      "name": "Find existing Shopify customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "identity"
+            },
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: \"query FindCustomerByPhone($query: String!) {\\n    customers(first: 5, query: $query) {\\n      nodes { id defaultPhoneNumber { phoneNumber } }\\n    }\\n  }\", variables: { query: 'phone:' + $json.phone_e164 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-import-inspect",
+      "name": "Inspect exact phone match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nif (payload.errors?.length) throw new Error(payload.errors.map((error) => error.message).join('; '));\nconst phone = $('Select satisfied support contacts').item.json.phone_e164;\nconst exact = (payload.data?.customers?.nodes || []).find((customer) => customer.defaultPhoneNumber?.phoneNumber === phone);\nreturn [{ json: { phone_e164: phone, existing_customer_id: exact?.id || null } }];"
+      }
+    },
+    {
+      "id": "wa-import-exists",
+      "name": "Customer already exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "wa-import-existing",
+              "leftValue": "={{ $json.existing_customer_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-import-existing-id",
+      "name": "Use existing customer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        -220
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { phone_e164: $json.phone_e164, shopify_customer_id: $json.existing_customer_id } }];"
+      }
+    },
+    {
+      "id": "wa-import-create",
+      "name": "Create Shopify support contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "identity"
+            },
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: \"mutation CreateSupportContact($input: CustomerInput!) {\\n    customerCreate(input: $input) {\\n      customer { id }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { phone: $json.phone_e164, tags: ['whatsapp-support-optin', 'whatsapp-marketing'], note: 'Imported from ReFind Inbox after the support marketing agreement and satisfaction safety check.', whatsAppMarketingConsent: { state: 'SUBSCRIBED', optInLevel: 'SINGLE_OPT_IN', updatedAt: $now.toISO() } } } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-import-validate-create",
+      "name": "Validate customer import",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        20
+      ],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerCreate;\nif (payload.errors?.length || result?.userErrors?.length || !result?.customer?.id) {\n  throw new Error('Shopify customer import failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: { phone_e164: $('Inspect exact phone match').item.json.phone_e164, shopify_customer_id: result.customer.id } }];"
+      }
+    },
+    {
+      "id": "wa-import-prepare-consent",
+      "name": "Prepare consent update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1950,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { phone_e164: $json.phone_e164, shopify_customer_id: $json.shopify_customer_id } }];"
+      }
+    },
+    {
+      "id": "wa-import-consent",
+      "name": "Confirm WhatsApp consent in Shopify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "identity"
+            },
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: \"mutation SetWhatsAppConsent($input: CustomerWhatsAppMarketingConsentUpdateInput!) {\\n    customerWhatsAppMarketingConsentUpdate(input: $input) {\\n      customerPhoneNumber { phoneNumber }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { customerId: $json.shopify_customer_id, whatsAppMarketingConsent: { state: 'SUBSCRIBED', optInLevel: 'SINGLE_OPT_IN', updatedAt: $now.toISO() } } } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-import-validate-consent",
+      "name": "Validate imported consent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerWhatsAppMarketingConsentUpdate;\nif (payload.errors?.length || result?.userErrors?.length || !result?.customerPhoneNumber?.phoneNumber) {\n  throw new Error('Shopify WhatsApp consent sync failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: {\n  phone_e164: $('Prepare consent update').item.json.phone_e164,\n  shopify_customer_id: $('Prepare consent update').item.json.shopify_customer_id,\n} }];"
+      }
+    },
+    {
+      "id": "wa-import-audit-code",
+      "name": "Build contact import audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const phone = String($json.phone_e164 || '').replace(/'/g, \"''\");\nconst customerId = String($json.shopify_customer_id || '').replace(/'/g, \"''\");\nreturn [{ json: { sql: \"with updated as (update public.wa_marketing_contacts set shopify_customer_id = '\" + customerId + \"', last_shopify_sync_at = now(), updated_at = now() where phone_e164 = '\" + phone + \"' returning phone_e164) insert into public.wa_marketing_events (phone_e164, event_type, payload, occurred_at) select phone_e164, 'shopify_contact_imported', jsonb_build_object('shopify_customer_id', '\" + customerId + \"'), now() from updated;\" } }];"
+      }
+    },
+    {
+      "id": "wa-import-audit",
+      "name": "Record Shopify contact import",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2860,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 04:10 London": {
+      "main": [
+        [
+          {
+            "node": "Get import Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get import Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Select satisfied support contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select satisfied support contacts": {
+      "main": [
+        [
+          {
+            "node": "Filter import candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter import candidates": {
+      "main": [
+        [
+          {
+            "node": "Find existing Shopify customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find existing Shopify customer": {
+      "main": [
+        [
+          {
+            "node": "Inspect exact phone match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect exact phone match": {
+      "main": [
+        [
+          {
+            "node": "Customer already exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer already exists?": {
+      "main": [
+        [
+          {
+            "node": "Use existing customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Shopify support contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use existing customer": {
+      "main": [
+        [
+          {
+            "node": "Prepare consent update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Shopify support contact": {
+      "main": [
+        [
+          {
+            "node": "Validate customer import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate customer import": {
+      "main": [
+        [
+          {
+            "node": "Prepare consent update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare consent update": {
+      "main": [
+        [
+          {
+            "node": "Confirm WhatsApp consent in Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm WhatsApp consent in Shopify": {
+      "main": [
+        [
+          {
+            "node": "Validate imported consent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate imported consent": {
+      "main": [
+        [
+          {
+            "node": "Build contact import audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build contact import audit": {
+      "main": [
+        [
+          {
+            "node": "Record Shopify contact import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "staticData": {
+    "node:Daily 04:10 London": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "9ae3fb05-b5e3-492e-9d80-f0e2e03414ad",
+  "activeVersionId": "9ae3fb05-b5e3-492e-9d80-f0e2e03414ad",
+  "versionCounter": 20,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-10T12:40:20.005Z",
+      "createdAt": "2026-08-10T12:40:20.005Z",
+      "role": "workflow:owner",
+      "workflowId": "6ZqwoceF2GNrxewQ",
+      "projectId": "AcXDzQXiTSvBmfxA",
+      "project": {
+        "updatedAt": "2026-02-11T11:38:24.768Z",
+        "createdAt": "2026-02-09T17:52:28.408Z",
+        "id": "AcXDzQXiTSvBmfxA",
+        "name": "Tom Pergam <tom.pegram@easytag.app>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-08-10T12:51:25.157Z",
+    "createdAt": "2026-08-10T12:51:25.157Z",
+    "versionId": "9ae3fb05-b5e3-492e-9d80-f0e2e03414ad",
+    "workflowId": "6ZqwoceF2GNrxewQ",
+    "nodes": [
+      {
+        "id": "wa-import-schedule",
+        "name": "Daily 04:10 London",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "10 4 * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "wa-import-token",
+        "name": "Get import Shopify token",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          260,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/oauth/access_token",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpCustomAuth",
+          "options": {}
+        },
+        "credentials": {
+          "httpCustomAuth": {
+            "id": "jspij3ockguA7sla",
+            "name": "easyTag Shopify Marketing Token Exchange"
+          }
+        }
+      },
+      {
+        "id": "wa-import-candidates",
+        "name": "Select satisfied support contacts",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          520,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "select c.phone_e164\n  from public.wa_marketing_contacts c\n  where c.source = 'inbox'\n    and c.support_status = 'satisfied'\n    and c.shopify_customer_id is null\n    and c.consent_state = 'SUBSCRIBED'\n    and c.opted_out_at is null\n    and not exists (select 1 from public.wa_marketing_suppressions s where s.phone_e164 = c.phone_e164)\n  order by md5(c.phone_e164)\n  limit 50;",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "wa-import-filter",
+        "name": "Filter import candidates",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          650,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return $input.all().filter((item) => Boolean(item.json.phone_e164));"
+        }
+      },
+      {
+        "id": "wa-import-find",
+        "name": "Find existing Shopify customer",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          780,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept-Encoding",
+                "value": "identity"
+              },
+              {
+                "name": "X-Shopify-Access-Token",
+                "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ query: \"query FindCustomerByPhone($query: String!) {\\n    customers(first: 5, query: $query) {\\n      nodes { id defaultPhoneNumber { phoneNumber } }\\n    }\\n  }\", variables: { query: 'phone:' + $json.phone_e164 } }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "wa-import-inspect",
+        "name": "Inspect exact phone match",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const payload = $input.first().json;\nif (payload.errors?.length) throw new Error(payload.errors.map((error) => error.message).join('; '));\nconst phone = $('Select satisfied support contacts').item.json.phone_e164;\nconst exact = (payload.data?.customers?.nodes || []).find((customer) => customer.defaultPhoneNumber?.phoneNumber === phone);\nreturn [{ json: { phone_e164: phone, existing_customer_id: exact?.id || null } }];"
+        }
+      },
+      {
+        "id": "wa-import-exists",
+        "name": "Customer already exists?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1300,
+          -100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "wa-import-existing",
+                "leftValue": "={{ $json.existing_customer_id }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "exists",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "wa-import-existing-id",
+        "name": "Use existing customer",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1560,
+          -220
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { phone_e164: $json.phone_e164, shopify_customer_id: $json.existing_customer_id } }];"
+        }
+      },
+      {
+        "id": "wa-import-create",
+        "name": "Create Shopify support contact",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1560,
+          20
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept-Encoding",
+                "value": "identity"
+              },
+              {
+                "name": "X-Shopify-Access-Token",
+                "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ query: \"mutation CreateSupportContact($input: CustomerInput!) {\\n    customerCreate(input: $input) {\\n      customer { id }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { phone: $json.phone_e164, tags: ['whatsapp-support-optin', 'whatsapp-marketing'], note: 'Imported from ReFind Inbox after the support marketing agreement and satisfaction safety check.', whatsAppMarketingConsent: { state: 'SUBSCRIBED', optInLevel: 'SINGLE_OPT_IN', updatedAt: $now.toISO() } } } }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "wa-import-validate-create",
+        "name": "Validate customer import",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          20
+        ],
+        "parameters": {
+          "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerCreate;\nif (payload.errors?.length || result?.userErrors?.length || !result?.customer?.id) {\n  throw new Error('Shopify customer import failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: { phone_e164: $('Inspect exact phone match').item.json.phone_e164, shopify_customer_id: result.customer.id } }];"
+        }
+      },
+      {
+        "id": "wa-import-prepare-consent",
+        "name": "Prepare consent update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1950,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { phone_e164: $json.phone_e164, shopify_customer_id: $json.shopify_customer_id } }];"
+        }
+      },
+      {
+        "id": "wa-import-consent",
+        "name": "Confirm WhatsApp consent in Shopify",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2080,
+          -100
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Accept-Encoding",
+                "value": "identity"
+              },
+              {
+                "name": "X-Shopify-Access-Token",
+                "value": "={{ $('Get import Shopify token').first().json.access_token }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ query: \"mutation SetWhatsAppConsent($input: CustomerWhatsAppMarketingConsentUpdateInput!) {\\n    customerWhatsAppMarketingConsentUpdate(input: $input) {\\n      customerPhoneNumber { phoneNumber }\\n      userErrors { field message }\\n    }\\n  }\", variables: { input: { customerId: $json.shopify_customer_id, whatsAppMarketingConsent: { state: 'SUBSCRIBED', optInLevel: 'SINGLE_OPT_IN', updatedAt: $now.toISO() } } } }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "wa-import-validate-consent",
+        "name": "Validate imported consent",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2340,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const payload = $input.first().json;\nconst result = payload.data?.customerWhatsAppMarketingConsentUpdate;\nif (payload.errors?.length || result?.userErrors?.length || !result?.customerPhoneNumber?.phoneNumber) {\n  throw new Error('Shopify WhatsApp consent sync failed: ' + [\n    ...(payload.errors || []).map((error) => error.message),\n    ...(result?.userErrors || []).map((error) => error.message),\n  ].join('; '));\n}\nreturn [{ json: {\n  phone_e164: $('Prepare consent update').item.json.phone_e164,\n  shopify_customer_id: $('Prepare consent update').item.json.shopify_customer_id,\n} }];"
+        }
+      },
+      {
+        "id": "wa-import-audit-code",
+        "name": "Build contact import audit",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2600,
+          -100
+        ],
+        "parameters": {
+          "jsCode": "const phone = String($json.phone_e164 || '').replace(/'/g, \"''\");\nconst customerId = String($json.shopify_customer_id || '').replace(/'/g, \"''\");\nreturn [{ json: { sql: \"with updated as (update public.wa_marketing_contacts set shopify_customer_id = '\" + customerId + \"', last_shopify_sync_at = now(), updated_at = now() where phone_e164 = '\" + phone + \"' returning phone_e164) insert into public.wa_marketing_events (phone_e164, event_type, payload, occurred_at) select phone_e164, 'shopify_contact_imported', jsonb_build_object('shopify_customer_id', '\" + customerId + \"'), now() from updated;\" } }];"
+        }
+      },
+      {
+        "id": "wa-import-audit",
+        "name": "Record Shopify contact import",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2860,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $json.sql }}",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Daily 04:10 London": {
+        "main": [
+          [
+            {
+              "node": "Get import Shopify token",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get import Shopify token": {
+        "main": [
+          [
+            {
+              "node": "Select satisfied support contacts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select satisfied support contacts": {
+        "main": [
+          [
+            {
+              "node": "Filter import candidates",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter import candidates": {
+        "main": [
+          [
+            {
+              "node": "Find existing Shopify customer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find existing Shopify customer": {
+        "main": [
+          [
+            {
+              "node": "Inspect exact phone match",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Inspect exact phone match": {
+        "main": [
+          [
+            {
+              "node": "Customer already exists?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Customer already exists?": {
+        "main": [
+          [
+            {
+              "node": "Use existing customer",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Create Shopify support contact",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Use existing customer": {
+        "main": [
+          [
+            {
+              "node": "Prepare consent update",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Shopify support contact": {
+        "main": [
+          [
+            {
+              "node": "Validate customer import",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate customer import": {
+        "main": [
+          [
+            {
+              "node": "Prepare consent update",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare consent update": {
+        "main": [
+          [
+            {
+              "node": "Confirm WhatsApp consent in Shopify",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Confirm WhatsApp consent in Shopify": {
+        "main": [
+          [
+            {
+              "node": "Validate imported consent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate imported consent": {
+        "main": [
+          [
+            {
+              "node": "Build contact import audit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build contact import audit": {
+        "main": [
+          [
+            {
+              "node": "Record Shopify contact import",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Tom Pergam",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-08-10T12:51:25.516Z",
+        "id": 550,
+        "workflowId": "6ZqwoceF2GNrxewQ",
+        "versionId": "9ae3fb05-b5e3-492e-9d80-f0e2e03414ad",
+        "event": "activated",
+        "userId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    ]
+  }
+}

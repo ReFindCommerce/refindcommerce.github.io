@@ -1,0 +1,178 @@
+{
+  "updatedAt": "2026-08-10T12:51:24.067Z",
+  "createdAt": "2026-08-10T12:37:15.206Z",
+  "id": "0ILXEVlR5l9tbQRH",
+  "name": "easyTag WhatsApp Marketing - Support Safety Sync",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "wa-safety-schedule",
+      "name": "Daily 03:45 London",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -100
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 3 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wa-safety-classify",
+      "name": "Classify support safety",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        320,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "insert into public.wa_marketing_contacts (\n    phone_e164, consent_state, consent_basis, consent_updated_at, consent_collected_from,\n    source, support_status, last_inbox_sync_at, updated_at\n  )\n  select distinct\n    '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g'),\n    'SUBSCRIBED',\n    'support_marketing_optin',\n    min(uploaded_at) over (partition by regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')),\n    'SUPPORT_MARKETING_AGREEMENT',\n    'inbox',\n    'unknown',\n    now(),\n    now()\n  from public.inbox_messages\n  where lower(channel) = 'whatsapp'\n    and regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n  on conflict (phone_e164) do update\n    set last_inbox_sync_at = now(), updated_at = now();\n\n  with whatsapp_messages as (\n    select\n      case\n        when regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n          then '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')\n        else null\n      end as phone_e164,\n      direction,\n      lower(coalesce(user_message, final_reply, '')) as body,\n      uploaded_at,\n      row_number() over (\n        partition by regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')\n        order by uploaded_at desc, id desc\n      ) as row_num\n    from public.inbox_messages\n    where lower(channel) = 'whatsapp'\n  ), support_rollup as (\n    select\n      phone_e164,\n      max(uploaded_at) as last_support_at,\n      (array_agg(body order by uploaded_at desc) filter (where direction = 'inbound' and row_num <= 12))[1] as recent_inbound,\n      (array_agg(direction order by uploaded_at desc))[1] as latest_direction,\n      string_agg(body, ' ' order by uploaded_at desc) filter (where row_num <= 12) as recent_text\n    from whatsapp_messages\n    where phone_e164 is not null\n    group by phone_e164\n  ), classified as (\n    select\n      c.phone_e164,\n      s.last_support_at,\n      case\n        when s.phone_e164 is null then 'no_history'\n        when coalesce(s.recent_text, '') ~ '(still (not|doesn.t)|not working|doesn.t work|broken|angry|complaint|refund|scam|terrible|awful|disappointed|no response|never arrived|not received)' then 'unsatisfied'\n        when s.latest_direction = 'inbound' then 'open'\n        when coalesce(s.recent_inbound, '') ~ '(thank(s| you)|great|perfect|working now|works now|resolved|sorted|received (it|the replacement)|appreciate)' then 'satisfied'\n        else 'unknown'\n      end as support_status\n    from public.wa_marketing_contacts c\n    left join support_rollup s using (phone_e164)\n  )\n  update public.wa_marketing_contacts c\n  set support_status = classified.support_status,\n      support_evidence = case classified.support_status\n        when 'satisfied' then 'Latest support history contains a clear positive resolution signal.'\n        when 'unsatisfied' then 'Recent support history contains an unresolved or negative signal.'\n        when 'open' then 'The customer sent the most recent support message.'\n        when 'unknown' then 'Support history exists without a clear satisfaction signal.'\n        else 'No WhatsApp support history was found.'\n      end,\n      last_support_at = classified.last_support_at,\n      cooling_until = case\n        when classified.last_support_at is null then null\n        else classified.last_support_at + make_interval(days => public.wa_marketing_setting_number('support_cooling_days', 7)::integer)\n      end,\n      last_inbox_sync_at = now(),\n      updated_at = now()\n  from classified\n  where c.phone_e164 = classified.phone_e164;\n\n  select support_status, count(*)::integer as contacts\n  from public.wa_marketing_contacts\n  group by support_status\n  order by support_status;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 03:45 London": {
+      "main": [
+        [
+          {
+            "node": "Classify support safety",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "staticData": {
+    "node:Daily 03:45 London": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "0cdc8141-8c77-458e-bf1c-fa6bde274ca9",
+  "activeVersionId": "0cdc8141-8c77-458e-bf1c-fa6bde274ca9",
+  "versionCounter": 14,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-08-10T12:37:15.208Z",
+      "createdAt": "2026-08-10T12:37:15.208Z",
+      "role": "workflow:owner",
+      "workflowId": "0ILXEVlR5l9tbQRH",
+      "projectId": "AcXDzQXiTSvBmfxA",
+      "project": {
+        "updatedAt": "2026-02-11T11:38:24.768Z",
+        "createdAt": "2026-02-09T17:52:28.408Z",
+        "id": "AcXDzQXiTSvBmfxA",
+        "name": "Tom Pergam <tom.pegram@easytag.app>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-08-10T12:51:24.068Z",
+    "createdAt": "2026-08-10T12:51:24.068Z",
+    "versionId": "0cdc8141-8c77-458e-bf1c-fa6bde274ca9",
+    "workflowId": "0ILXEVlR5l9tbQRH",
+    "nodes": [
+      {
+        "id": "wa-safety-schedule",
+        "name": "Daily 03:45 London",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "45 3 * * *"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "wa-safety-classify",
+        "name": "Classify support safety",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          320,
+          -100
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "insert into public.wa_marketing_contacts (\n    phone_e164, consent_state, consent_basis, consent_updated_at, consent_collected_from,\n    source, support_status, last_inbox_sync_at, updated_at\n  )\n  select distinct\n    '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g'),\n    'SUBSCRIBED',\n    'support_marketing_optin',\n    min(uploaded_at) over (partition by regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')),\n    'SUPPORT_MARKETING_AGREEMENT',\n    'inbox',\n    'unknown',\n    now(),\n    now()\n  from public.inbox_messages\n  where lower(channel) = 'whatsapp'\n    and regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n  on conflict (phone_e164) do update\n    set last_inbox_sync_at = now(), updated_at = now();\n\n  with whatsapp_messages as (\n    select\n      case\n        when regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g') ~ '^[1-9][0-9]{7,14}$'\n          then '+' || regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')\n        else null\n      end as phone_e164,\n      direction,\n      lower(coalesce(user_message, final_reply, '')) as body,\n      uploaded_at,\n      row_number() over (\n        partition by regexp_replace(coalesce(thread_id, message_from, ''), '[^0-9]', '', 'g')\n        order by uploaded_at desc, id desc\n      ) as row_num\n    from public.inbox_messages\n    where lower(channel) = 'whatsapp'\n  ), support_rollup as (\n    select\n      phone_e164,\n      max(uploaded_at) as last_support_at,\n      (array_agg(body order by uploaded_at desc) filter (where direction = 'inbound' and row_num <= 12))[1] as recent_inbound,\n      (array_agg(direction order by uploaded_at desc))[1] as latest_direction,\n      string_agg(body, ' ' order by uploaded_at desc) filter (where row_num <= 12) as recent_text\n    from whatsapp_messages\n    where phone_e164 is not null\n    group by phone_e164\n  ), classified as (\n    select\n      c.phone_e164,\n      s.last_support_at,\n      case\n        when s.phone_e164 is null then 'no_history'\n        when coalesce(s.recent_text, '') ~ '(still (not|doesn.t)|not working|doesn.t work|broken|angry|complaint|refund|scam|terrible|awful|disappointed|no response|never arrived|not received)' then 'unsatisfied'\n        when s.latest_direction = 'inbound' then 'open'\n        when coalesce(s.recent_inbound, '') ~ '(thank(s| you)|great|perfect|working now|works now|resolved|sorted|received (it|the replacement)|appreciate)' then 'satisfied'\n        else 'unknown'\n      end as support_status\n    from public.wa_marketing_contacts c\n    left join support_rollup s using (phone_e164)\n  )\n  update public.wa_marketing_contacts c\n  set support_status = classified.support_status,\n      support_evidence = case classified.support_status\n        when 'satisfied' then 'Latest support history contains a clear positive resolution signal.'\n        when 'unsatisfied' then 'Recent support history contains an unresolved or negative signal.'\n        when 'open' then 'The customer sent the most recent support message.'\n        when 'unknown' then 'Support history exists without a clear satisfaction signal.'\n        else 'No WhatsApp support history was found.'\n      end,\n      last_support_at = classified.last_support_at,\n      cooling_until = case\n        when classified.last_support_at is null then null\n        else classified.last_support_at + make_interval(days => public.wa_marketing_setting_number('support_cooling_days', 7)::integer)\n      end,\n      last_inbox_sync_at = now(),\n      updated_at = now()\n  from classified\n  where c.phone_e164 = classified.phone_e164;\n\n  select support_status, count(*)::integer as contacts\n  from public.wa_marketing_contacts\n  group by support_status\n  order by support_status;",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "MHmCNfCkbN5OTMZj",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Daily 03:45 London": {
+        "main": [
+          [
+            {
+              "node": "Classify support safety",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Tom Pergam",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-08-10T12:51:24.425Z",
+        "id": 548,
+        "workflowId": "0ILXEVlR5l9tbQRH",
+        "versionId": "0cdc8141-8c77-458e-bf1c-fa6bde274ca9",
+        "event": "activated",
+        "userId": "621b94e9-a8d2-4707-9397-ae16cf4028e1"
+      }
+    ]
+  }
+}

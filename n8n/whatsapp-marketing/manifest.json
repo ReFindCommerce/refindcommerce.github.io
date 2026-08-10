@@ -1,0 +1,35 @@
+{
+  "exportedAt": "2026-08-10T12:55:59.488Z",
+  "workflows": [
+    {
+      "file": "shopify-sync.json",
+      "id": "MvHstdeuT3QqTmdr",
+      "active": true
+    },
+    {
+      "file": "support-safety-sync.json",
+      "id": "0ILXEVlR5l9tbQRH",
+      "active": true
+    },
+    {
+      "file": "shopify-contact-import.json",
+      "id": "6ZqwoceF2GNrxewQ",
+      "active": true
+    },
+    {
+      "file": "opt-out-sync.json",
+      "id": "cbRyEdjtcmZitq5d",
+      "active": true
+    },
+    {
+      "file": "scheduler.json",
+      "id": "AC5RVbAI0spGUPL8",
+      "active": true
+    },
+    {
+      "file": "schema-setup.json",
+      "id": "cKNMZ5gYIbMHV3Pp",
+      "active": false
+    }
+  ]
+}
