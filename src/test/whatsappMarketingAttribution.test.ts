@@ -64,6 +64,21 @@ describe("WhatsApp marketing attribution release path", () => {
     expect(migration).not.toContain("on conflict (campaign_id, phone_e164)");
   });
 
+  it("provides a live-safe click redirect workflow", () => {
+    const workflow = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "n8n/whatsapp-marketing/click-redirect.json"),
+        "utf8",
+      ),
+    );
+    const workflowText = JSON.stringify(workflow);
+
+    expect(workflowText).toContain("easytag-wa-click/:token");
+    expect(workflowText).toContain("wa_marketing_record_click");
+    expect(workflowText).toContain("respondWith\":\"redirect");
+    expect(workflowText).toContain("https://easytag.app/");
+  });
+
   it("records unique clicks and attributes only post-click orders", () => {
     const migration = fs.readFileSync(
       path.join(root, "supabase/migrations/20260813_whatsapp_marketing_attribution.sql"),

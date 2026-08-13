@@ -1,0 +1,80 @@
+{
+  "name": "easyTag WhatsApp Marketing - Click Redirect",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "easytag-wa-click/:token",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wa-click-webhook",
+      "name": "Tracked click",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "92d73794-e252-43a8-a144-e89d2b99d288"
+    },
+    {
+      "parameters": {
+        "jsCode": "const token = String($json.params?.token || '').trim();\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)) {\n  return [{ json: { sql: `select false as valid, 'https://easytag.app/'::text as destination` } }];\n}\nconst sql = `select coalesce(result->>'valid','false')::boolean as valid, coalesce(result->>'destination','https://easytag.app/')::text as destination from (select public.wa_marketing_record_click('${token}'::uuid) as result) tracked`;\nreturn [{ json: { sql } }];"
+      },
+      "id": "wa-click-build-query",
+      "name": "Validate click token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "wa-click-record",
+      "name": "Record tracked click",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [520, 0],
+      "credentials": {
+        "postgres": {
+          "id": "a8JTkj7MVmvgQ2cO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "redirect",
+        "redirectURL": "={{ $json.valid && /^https:\\/\\/(www\\.)?easytag\\.app(\\/|$)/i.test($json.destination) ? $json.destination : 'https://easytag.app/' }}",
+        "options": {
+          "responseCode": 302
+        }
+      },
+      "id": "wa-click-redirect",
+      "name": "Redirect to easyTag",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [780, 0]
+    }
+  ],
+  "connections": {
+    "Tracked click": {
+      "main": [[{"node": "Validate click token", "type": "main", "index": 0}]]
+    },
+    "Validate click token": {
+      "main": [[{"node": "Record tracked click", "type": "main", "index": 0}]]
+    },
+    "Record tracked click": {
+      "main": [[{"node": "Redirect to easyTag", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/London"
+  },
+  "active": false
+}
