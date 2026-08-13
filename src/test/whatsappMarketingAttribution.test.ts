@@ -64,6 +64,19 @@ describe("WhatsApp marketing attribution release path", () => {
     expect(migration).not.toContain("on conflict (campaign_id, phone_e164)");
   });
 
+  it("does not auto-select contacts for manual internal campaigns", () => {
+    const migration = fs.readFileSync(
+      path.join(
+        root,
+        "supabase/migrations/20260813_whatsapp_marketing_manual_recipient_guard.sql",
+      ),
+      "utf8",
+    );
+
+    expect(migration).toContain("if campaign.automatic then");
+    expect(migration).toContain("Manual campaigns only use recipients");
+  });
+
   it("provides a live-safe click redirect workflow", () => {
     const workflow = JSON.parse(
       fs.readFileSync(
