@@ -72,7 +72,8 @@ export function buildShopifySyncWorkflow({ tokenCredentialId, postgresCredential
   const customerQuery = `query MarketingCustomers($cursor: String) {
     customers(first: 250, after: $cursor) {
       nodes {
-        id firstName lastName locale tags
+        id firstName lastName locale tags numberOfOrders
+        lastOrder { createdAt }
         defaultPhoneNumber {
           phoneNumber
           marketingState marketingOptInLevel marketingUpdatedAt marketingCollectedFrom
@@ -119,6 +120,8 @@ const customers = (payload.data?.customers?.nodes || [])
     sms_marketing_updated_at: phone.marketingUpdatedAt || null,
     sms_marketing_collected_from: phone.marketingCollectedFrom || null,
     tags: Array.isArray(customer.tags) ? customer.tags : [],
+    order_count: Number(customer.numberOfOrders || 0),
+    last_order_at: customer.lastOrder?.createdAt || null,
     };
   });
 const pageInfo = payload.data?.customers?.pageInfo || {};
@@ -135,10 +138,10 @@ const encoded = JSON.stringify(input.customers || []).replace(/'/g, "''");
 const cursor = String(input.cursor || '').replace(/'/g, "''");
 const hasNext = input.has_next_page === true ? 'true' : 'false';
 const sql = [
-  "insert into public.wa_marketing_contacts (phone_e164, shopify_customer_id, first_name, last_name, locale, consent_state, consent_updated_at, consent_collected_from, consent_basis, sms_marketing_state, sms_marketing_updated_at, sms_marketing_collected_from, tags, source, last_shopify_sync_at, updated_at)",
-  "select x.phone_e164, x.shopify_customer_id, x.first_name, x.last_name, x.locale, x.consent_state, x.consent_updated_at::timestamptz, x.consent_collected_from, x.consent_basis, x.sms_marketing_state, x.sms_marketing_updated_at::timestamptz, x.sms_marketing_collected_from, coalesce(x.tags, '[]'::jsonb), 'shopify', now(), now()",
-  "from jsonb_to_recordset('" + encoded + "'::jsonb) as x(phone_e164 text, shopify_customer_id text, first_name text, last_name text, locale text, consent_state text, consent_updated_at text, consent_collected_from text, consent_basis text, sms_marketing_state text, sms_marketing_updated_at text, sms_marketing_collected_from text, tags jsonb)",
-  "on conflict (phone_e164) do update set shopify_customer_id = excluded.shopify_customer_id, first_name = excluded.first_name, last_name = excluded.last_name, locale = excluded.locale, consent_state = excluded.consent_state, consent_updated_at = excluded.consent_updated_at, consent_collected_from = excluded.consent_collected_from, consent_basis = excluded.consent_basis, sms_marketing_state = excluded.sms_marketing_state, sms_marketing_updated_at = excluded.sms_marketing_updated_at, sms_marketing_collected_from = excluded.sms_marketing_collected_from, tags = excluded.tags, last_shopify_sync_at = now(), updated_at = now();",
+  "insert into public.wa_marketing_contacts (phone_e164, shopify_customer_id, first_name, last_name, locale, consent_state, consent_updated_at, consent_collected_from, consent_basis, sms_marketing_state, sms_marketing_updated_at, sms_marketing_collected_from, tags, order_count, last_order_at, source, last_shopify_sync_at, updated_at)",
+  "select x.phone_e164, x.shopify_customer_id, x.first_name, x.last_name, x.locale, x.consent_state, x.consent_updated_at::timestamptz, x.consent_collected_from, x.consent_basis, x.sms_marketing_state, x.sms_marketing_updated_at::timestamptz, x.sms_marketing_collected_from, coalesce(x.tags, '[]'::jsonb), coalesce(x.order_count, 0), x.last_order_at::timestamptz, 'shopify', now(), now()",
+  "from jsonb_to_recordset('" + encoded + "'::jsonb) as x(phone_e164 text, shopify_customer_id text, first_name text, last_name text, locale text, consent_state text, consent_updated_at text, consent_collected_from text, consent_basis text, sms_marketing_state text, sms_marketing_updated_at text, sms_marketing_collected_from text, tags jsonb, order_count integer, last_order_at text)",
+  "on conflict (phone_e164) do update set shopify_customer_id = excluded.shopify_customer_id, first_name = excluded.first_name, last_name = excluded.last_name, locale = excluded.locale, consent_state = excluded.consent_state, consent_updated_at = excluded.consent_updated_at, consent_collected_from = excluded.consent_collected_from, consent_basis = excluded.consent_basis, sms_marketing_state = excluded.sms_marketing_state, sms_marketing_updated_at = excluded.sms_marketing_updated_at, sms_marketing_collected_from = excluded.sms_marketing_collected_from, tags = excluded.tags, order_count = excluded.order_count, last_order_at = excluded.last_order_at, last_shopify_sync_at = now(), updated_at = now();",
   "select '" + cursor + "'::text as cursor, " + hasNext + "::boolean as has_next_page, (select count(*) from public.wa_marketing_contacts)::integer as contacts_total;",
 ].join(' ');
 return [{ json: { sql } }];`;
@@ -727,6 +730,10 @@ export function buildSchedulerWorkflow({ postgresCredentialId, whatsappCredentia
     and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'shopify_connected'), false)
     and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'whatsapp_connected'), false)
     and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'meta_templates_approved'), false)
+    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'click_tracking_connected'), false)
+    and coalesce((select (value #>> '{}')::boolean from public.wa_marketing_settings where key = 'order_attribution_connected'), false)
+    and extract(hour from now() at time zone 'Europe/London') >= coalesce((select (value #>> '{}')::integer from public.wa_marketing_settings where key = 'send_window_start_hour_london'), 10)
+    and extract(hour from now() at time zone 'Europe/London') < coalesce((select (value #>> '{}')::integer from public.wa_marketing_settings where key = 'send_window_end_hour_london'), 18)
   order by c.scheduled_for
   limit 2;`;
 
@@ -736,7 +743,7 @@ return [{ json: { sql: "with selected as (select * from public.wa_marketing_sele
 
   const recheckCode = `const recipientId = String($json.recipient_id || '');
 if (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');
-return [{ json: { sql: "with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '" + recipientId + "'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;" } }];`;
+return [{ json: { sql: "with send_lock as (select pg_advisory_xact_lock(hashtext('wa_marketing_daily_send_cap'))), ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() from send_lock where r.id = '" + recipientId + "'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 and extract(hour from now() at time zone 'Europe/London') >= coalesce((select (value #>> '{}')::integer from public.wa_marketing_settings where key = 'send_window_start_hour_london'), 10) and extract(hour from now() at time zone 'Europe/London') < coalesce((select (value #>> '{}')::integer from public.wa_marketing_settings where key = 'send_window_end_hour_london'), 18) and (select count(*) from public.wa_marketing_recipients d join public.wa_marketing_campaigns dc on dc.id = d.campaign_id where dc.automatic and d.send_status in ('sending','sent','delivered','read') and (coalesce(d.sent_at,d.updated_at) at time zone 'Europe/London')::date = (now() at time zone 'Europe/London')::date) < coalesce((select (value #>> '{}')::integer from public.wa_marketing_settings where key = 'daily_send_limit'), 5) returning r.id, r.phone_e164, r.campaign_id, r.click_token) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, ready.click_token::text as click_token, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;" } }];`;
 
   const templateBody = `={{ JSON.stringify({
     messaging_product: 'whatsapp',
@@ -745,7 +752,7 @@ return [{ json: { sql: "with ready as (update public.wa_marketing_recipients r s
     template: {
       name: $json.template_name,
       language: { code: $json.template_language },
-      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token)),
+      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token).replaceAll('__CLICK_TOKEN__', $json.click_token)),
     },
   }) }}`;
 

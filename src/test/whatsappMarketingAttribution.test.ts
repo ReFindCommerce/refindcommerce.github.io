@@ -28,6 +28,42 @@ describe("WhatsApp marketing attribution release path", () => {
     expect(workflowText).toContain("key = 'order_attribution_connected'");
   });
 
+  it("enforces a five-per-day London send window", () => {
+    const workflowText = fs.readFileSync(
+      path.join(root, "n8n/whatsapp-marketing/scheduler.json"),
+      "utf8",
+    );
+
+    expect(workflowText).toContain("send_window_start_hour_london");
+    expect(workflowText).toContain("send_window_end_hour_london");
+    expect(workflowText).toContain("wa_marketing_daily_send_cap");
+    expect(workflowText).toContain("daily_send_limit");
+    expect(workflowText).toContain("Europe/London");
+  });
+
+  it("syncs Shopify purchase history for audience targeting", () => {
+    const workflowText = fs.readFileSync(
+      path.join(root, "n8n/whatsapp-marketing/shopify-sync.json"),
+      "utf8",
+    );
+
+    expect(workflowText).toContain("numberOfOrders");
+    expect(workflowText).toContain("order_count");
+    expect(workflowText).toContain("last_order_at");
+  });
+
+  it("uses the named recipient constraint to avoid PL/pgSQL column ambiguity", () => {
+    const migration = fs.readFileSync(
+      path.join(root, "supabase/migrations/20260813_whatsapp_marketing_targeting.sql"),
+      "utf8",
+    );
+
+    expect(migration).toContain(
+      "on conflict on constraint wa_marketing_recipients_campaign_id_phone_e164_key do nothing",
+    );
+    expect(migration).not.toContain("on conflict (campaign_id, phone_e164)");
+  });
+
   it("records unique clicks and attributes only post-click orders", () => {
     const migration = fs.readFileSync(
       path.join(root, "supabase/migrations/20260813_whatsapp_marketing_attribution.sql"),
