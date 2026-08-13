@@ -1,0 +1,103 @@
+{
+  "name": "easyTag WhatsApp Marketing - Order Attribution",
+  "nodes": [
+    {
+      "id": "wa-orders-schedule",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, -100],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      }
+    },
+    {
+      "id": "wa-orders-token",
+      "name": "Get short-lived Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, -100],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "jspij3ockguA7sla",
+          "name": "easyTag Shopify Marketing Token Exchange"
+        }
+      }
+    },
+    {
+      "id": "wa-orders-fetch",
+      "name": "Fetch recent Shopify orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, -100],
+      "parameters": {
+        "method": "POST",
+        "url": "https://s2amdn-ha.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Accept-Encoding", "value": "identity" },
+            { "name": "X-Shopify-Access-Token", "value": "={{ $('Get short-lived Shopify token').first().json.access_token }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: `query WhatsAppAttributedOrders($query: String!) { orders(first: 250, sortKey: CREATED_AT, reverse: true, query: $query) { nodes { id name createdAt customer { id } landingPageDisplayText totalPriceSet { shopMoney { amount currencyCode } } } } }`, variables: { query: `created_at:>=${new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString()}` } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "wa-orders-build-sql",
+      "name": "Build attribution query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, -100],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nif (payload.errors?.length) throw new Error('Shopify order query failed: ' + payload.errors.map((error) => error.message).join('; '));\nconst orders = payload.data?.orders?.nodes || [];\nconst quote = (value) => value == null ? 'null' : \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\nconst statements = orders.map((order) => {\n  const money = order.totalPriceSet?.shopMoney || {};\n  return `select public.wa_marketing_attribute_order(${quote(order.customer?.id)}, ${quote(order.id)}, ${quote(order.name)}, ${quote(order.createdAt)}::timestamptz, ${Number(money.amount || 0)}, ${quote(money.currencyCode || '')}, ${quote(order.landingPageDisplayText)});`;\n});\nstatements.push(\"insert into public.wa_marketing_settings (key, value, updated_at) values ('order_attribution_connected', 'true'::jsonb, now()) on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at;\");\nstatements.push(`select ${orders.length}::integer as orders_checked, count(*) filter (where attributed_order_id is not null)::integer as orders_attributed from public.wa_marketing_recipients;`);\nreturn [{ json: { sql: statements.join(' ') } }];"
+      }
+    },
+    {
+      "id": "wa-orders-attribute",
+      "name": "Attribute clicked orders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1040, -100],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "MHmCNfCkbN5OTMZj",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every hour": { "main": [[{ "node": "Get short-lived Shopify token", "type": "main", "index": 0 }]] },
+    "Get short-lived Shopify token": { "main": [[{ "node": "Fetch recent Shopify orders", "type": "main", "index": 0 }]] },
+    "Fetch recent Shopify orders": { "main": [[{ "node": "Build attribution query", "type": "main", "index": 0 }]] },
+    "Build attribution query": { "main": [[{ "node": "Attribute clicked orders", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": false
+  },
+  "active": false,
+  "tags": []
+}

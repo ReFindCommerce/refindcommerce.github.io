@@ -70,14 +70,27 @@ export interface MarketingCampaign {
   automatic: boolean;
   approved_at: string | null;
   blocked_reason: string | null;
+  delivered: number;
+  clicked: number;
+  orders: number;
+  ctr: number;
+  conversion_rate: number;
+  revenue: number;
   created_at: string;
   updated_at: string;
 }
 
 export interface MarketingDashboardData {
   audience: MarketingAudienceMetrics;
+  results: {
+    delivered: number;
+    clicked: number;
+    orders: number;
+    ctr: number;
+    conversionRate: number;
+    revenue: number;
+  };
   nextCampaign: MarketingCampaign | null;
   settings: Record<string, boolean | number | string | null>;
   updatedAt: string;
 }
-

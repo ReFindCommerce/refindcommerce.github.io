@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Marketing from "./pages/Marketing";
 import NotFound from "./pages/NotFound";
 import WhatsAppPreferences from "./pages/WhatsAppPreferences";
+import WhatsAppMarketingClick from "./pages/WhatsAppMarketingClick";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/marketing/preferences" element={<WhatsAppPreferences />} />
+          <Route path="/marketing/click" element={<WhatsAppMarketingClick />} />
           <Route element={<PrivateRoutes />}>
             <Route path="/" element={<Index />} />
             <Route path="/marketing" element={<Marketing />} />

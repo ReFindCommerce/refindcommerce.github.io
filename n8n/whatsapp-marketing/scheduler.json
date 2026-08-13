@@ -118,7 +118,7 @@
         -100
       ],
       "parameters": {
-        "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
+        "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id, r.click_token) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, ready.click_token::text as click_token, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
       }
     },
     {
@@ -181,7 +181,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token)),\n    },\n  }) }}",
+        "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token).replaceAll('__CLICK_TOKEN__', $json.click_token)),\n    },\n  }) }}",
         "options": {}
       },
       "credentials": {
@@ -503,7 +503,7 @@
           -100
         ],
         "parameters": {
-          "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
+          "jsCode": "const recipientId = String($json.recipient_id || '');\nif (!/^[0-9a-f-]{36}$/i.test(recipientId)) throw new Error('Invalid recipient id');\nreturn [{ json: { sql: \"with ready as (update public.wa_marketing_recipients r set eligibility_status = 'eligible', blocked_reasons = '{}', send_status = 'sending', updated_at = now() where r.id = '\" + recipientId + \"'::uuid and cardinality(public.wa_marketing_block_reasons(r.phone_e164, now())) = 0 returning r.id, r.phone_e164, r.campaign_id, r.click_token) select ready.id as recipient_id, ready.phone_e164, ready.campaign_id, ready.click_token::text as click_token, c.template_name, c.template_language, c.template_components, contact.preference_token::text as preference_token from ready join public.wa_marketing_campaigns c on c.id = ready.campaign_id join public.wa_marketing_contacts contact on contact.phone_e164 = ready.phone_e164;\" } }];"
         }
       },
       {
@@ -566,7 +566,7 @@
           "sendBody": true,
           "contentType": "raw",
           "rawContentType": "application/json",
-          "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token)),\n    },\n  }) }}",
+          "body": "={{ JSON.stringify({\n    messaging_product: 'whatsapp',\n    to: $json.phone_e164.replace(/^\\+/, ''),\n    type: 'template',\n    template: {\n      name: $json.template_name,\n      language: { code: $json.template_language },\n      components: JSON.parse(JSON.stringify($json.template_components || []).replaceAll('__PREFERENCE_TOKEN__', $json.preference_token).replaceAll('__CLICK_TOKEN__', $json.click_token)),\n    },\n  }) }}",
           "options": {}
         },
         "credentials": {

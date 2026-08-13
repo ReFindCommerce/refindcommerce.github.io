@@ -29,6 +29,12 @@ import { fetchMarketingCampaigns, fetchMarketingDashboard } from "@/lib/marketin
 
 const templates = [
   {
+    name: "easy family travel",
+    intent: "Brand curiosity",
+    message: "You probably know the easy name from easyJet. easyTag is another member of the easy family of brands, focused on a very travel-relevant problem.",
+    status: "In review",
+  },
+  {
     name: "Travel story",
     intent: "Useful story",
     message: "That horrible half-second when your wallet is not where you left it. Most of the time it is nearby. The panic does not know that.",
@@ -87,6 +93,7 @@ function Marketing() {
     { label: "Suppressed", value: dashboard?.audience.suppressed ?? "--", note: "Opt-outs and service blocks", icon: CircleSlash2, tone: "text-red-700 bg-red-50" },
     { label: "At 30-day cap", value: dashboard?.audience.at30DayCap ?? "--", note: "Maximum two messages", icon: ShieldCheck, tone: "text-slate-700 bg-slate-100" },
   ];
+  const results = dashboard?.results;
   const gates = [
     { label: "Shopify consent sync", detail: "WhatsApp, phone-marketing and support consent evidence", passed: settings.shopify_connected === true },
     { label: "WhatsApp sender connected", detail: "Existing easyTag sender, isolated workflow", passed: settings.whatsapp_connected === true },
@@ -275,9 +282,9 @@ function Marketing() {
               </div>
               <div className="grid overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-sm sm:grid-cols-3">
                 {[
-                  { label: "Delivered", value: "--", icon: MessageSquareText },
-                  { label: "Clicked", value: "--", icon: MousePointerClick },
-                  { label: "Orders", value: "--", icon: ShoppingBag },
+                  { label: "Delivered", value: results?.delivered ?? "--", icon: MessageSquareText },
+                  { label: "Clicked / CTR", value: results ? `${results.clicked} / ${results.ctr}%` : "--", icon: MousePointerClick },
+                  { label: "Orders / conversion", value: results ? `${results.orders} / ${results.conversionRate}%` : "--", icon: ShoppingBag },
                 ].map((item, index) => (
                   <div key={item.label} className={cn("flex items-center gap-3 p-4", index > 0 && "border-t border-slate-200 sm:border-l sm:border-t-0")}>
                     <item.icon className="h-5 w-5 text-slate-400" />
@@ -336,7 +343,7 @@ function Marketing() {
                 New template
               </Button>
             </div>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {templates.map((template) => (
                 <article key={template.name} className="flex min-h-[260px] flex-col rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">

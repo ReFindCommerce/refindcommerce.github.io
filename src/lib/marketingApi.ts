@@ -29,3 +29,14 @@ export async function optOutOfWhatsAppMarketing(token: string): Promise<void> {
   if (error) throw error;
   if (!data?.success) throw new Error("This preferences link is not valid.");
 }
+
+export interface WhatsAppClickResult {
+  valid: boolean;
+  destination?: string;
+}
+
+export async function recordWhatsAppMarketingClick(token: string): Promise<WhatsAppClickResult> {
+  const { data, error } = await supabase.rpc("wa_marketing_record_click", { p_token: token });
+  if (error) throw error;
+  return data as WhatsAppClickResult;
+}
