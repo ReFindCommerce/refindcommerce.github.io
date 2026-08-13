@@ -18,6 +18,16 @@ describe("WhatsApp marketing attribution release path", () => {
     expect(sender?.parameters.body).toContain("$json.click_token");
   });
 
+  it("blocks scheduling until click and order tracking are connected", () => {
+    const workflowText = fs.readFileSync(
+      path.join(root, "n8n/whatsapp-marketing/scheduler.json"),
+      "utf8",
+    );
+
+    expect(workflowText).toContain("key = 'click_tracking_connected'");
+    expect(workflowText).toContain("key = 'order_attribution_connected'");
+  });
+
   it("records unique clicks and attributes only post-click orders", () => {
     const migration = fs.readFileSync(
       path.join(root, "supabase/migrations/20260813_whatsapp_marketing_attribution.sql"),
