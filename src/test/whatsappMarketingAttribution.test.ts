@@ -39,6 +39,17 @@ describe("WhatsApp marketing attribution release path", () => {
     expect(workflowText).toContain("wa_marketing_daily_send_cap");
     expect(workflowText).toContain("daily_send_limit");
     expect(workflowText).toContain("Europe/London");
+    expect(workflowText).not.toContain("where dc.automatic and d.send_status");
+  });
+
+  it("skips scheduled campaigns once their explicit recipient queue is empty", () => {
+    const workflowText = fs.readFileSync(
+      path.join(root, "n8n/whatsapp-marketing/scheduler.json"),
+      "utf8",
+    );
+
+    expect(workflowText).toContain("pending.campaign_id = c.id");
+    expect(workflowText).toContain("pending.send_status = 'queued'");
   });
 
   it("syncs Shopify purchase history for audience targeting", () => {
