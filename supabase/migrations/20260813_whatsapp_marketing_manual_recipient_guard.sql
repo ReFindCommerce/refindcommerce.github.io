@@ -49,6 +49,7 @@ begin
   select r.id, r.phone_e164, r.blocked_reasons
   from public.wa_marketing_recipients r
   where r.campaign_id = campaign.id
+    and r.send_status = 'queued'
   order by r.selected_at, r.id;
 end;
 $$;

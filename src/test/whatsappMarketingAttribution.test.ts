@@ -75,6 +75,49 @@ describe("WhatsApp marketing attribution release path", () => {
 
     expect(migration).toContain("if campaign.automatic then");
     expect(migration).toContain("Manual campaigns only use recipients");
+    expect(migration).toContain("and r.send_status = 'queued'");
+  });
+
+  it("returns a newly selected cohort without rejoining the same-statement table snapshot", () => {
+    const workflow = JSON.parse(
+      fs.readFileSync(path.join(root, "n8n/whatsapp-marketing/scheduler.json"), "utf8"),
+    );
+    const buildCohort = workflow.nodes.find(
+      (node: { name: string }) => node.name === "Build cohort selection",
+    );
+    const cohortCode = String(buildCohort?.parameters?.jsCode || "");
+
+    expect(cohortCode).toContain("select s.recipient_id, s.phone_e164");
+    expect(cohortCode).not.toContain(
+      "join public.wa_marketing_recipients r on r.id = s.recipient_id",
+    );
+  });
+
+  it("preserves every selected recipient through the final eligibility builder", () => {
+    const workflow = JSON.parse(
+      fs.readFileSync(path.join(root, "n8n/whatsapp-marketing/scheduler.json"), "utf8"),
+    );
+    const finalBuilder = workflow.nodes.find(
+      (node: { name: string }) => node.name === "Build final eligibility check",
+    );
+    const builderCode = String(finalBuilder?.parameters?.jsCode || "");
+
+    expect(builderCode).toContain("$input.all().map((item)");
+    expect(builderCode).toContain("item.json.recipient_id");
+  });
+
+  it("pairs every Meta send response with its recipient audit row", () => {
+    const workflow = JSON.parse(
+      fs.readFileSync(path.join(root, "n8n/whatsapp-marketing/scheduler.json"), "utf8"),
+    );
+    const auditBuilder = workflow.nodes.find(
+      (node: { name: string }) => node.name === "Build send audit",
+    );
+    const auditCode = String(auditBuilder?.parameters?.jsCode || "");
+
+    expect(auditCode).toContain("$('Final eligibility check').all()");
+    expect(auditCode).toContain("$input.all().map((item, index)");
+    expect(auditCode).not.toContain("$input.first()");
   });
 
   it("provides a live-safe click redirect workflow", () => {
