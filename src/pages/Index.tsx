@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 const Index = () => {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const [conversationRefreshToken, setConversationRefreshToken] = useState(0);
 
   const handleSelectConversation = (conversation: Conversation) => {
     setSelectedConversation(conversation);
@@ -15,6 +16,12 @@ const Index = () => {
 
   const handleBack = () => {
     setShowChat(false);
+  };
+
+  const handleMarkedRead = () => {
+    setSelectedConversation(null);
+    setShowChat(false);
+    setConversationRefreshToken((value) => value + 1);
   };
 
   return (
@@ -27,8 +34,9 @@ const Index = () => {
         )}
       >
         <ConversationList
-          selectedThreadId={selectedConversation?.thread_id || null}
+          selectedConversationKey={selectedConversation?.conversation_key || null}
           onSelectConversation={handleSelectConversation}
+          refreshToken={conversationRefreshToken}
         />
       </div>
 
@@ -42,6 +50,7 @@ const Index = () => {
         <ChatView
           conversation={selectedConversation}
           onBack={handleBack}
+          onMarkedRead={handleMarkedRead}
         />
       </div>
     </div>

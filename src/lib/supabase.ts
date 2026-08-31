@@ -3,6 +3,7 @@ import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox
 import { formatSuggestedReply } from '@/lib/textFormat';
 import { buildEnglishFallbackReply, shouldReplaceWithEnglishFallback } from '@/lib/languageRules';
 import { applyProductFactGuard } from '@/lib/productFactGuards';
+import { isConversationMarkedRead } from '@/lib/inboxReadState';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -202,7 +203,13 @@ export async function fetchConversations(filters?: {
   });
 
   // Sort: new status first, then by time
-  const conversations = Array.from(conversationMap.values());
+  let conversations = Array.from(conversationMap.values());
+
+  if (!filters?.includeArchived) {
+    const readStates = await fetchConversationReadStates();
+    conversations = conversations.filter((conversation) => !isConversationMarkedRead(conversation, readStates));
+  }
+
   conversations.sort((a, b) => {
     if (a.status === 'new' && b.status !== 'new') return -1;
     if (a.status !== 'new' && b.status === 'new') return 1;
@@ -210,6 +217,38 @@ export async function fetchConversations(filters?: {
   });
 
   return conversations;
+}
+
+const CONVERSATION_READS_TABLE = 'inbox_conversation_reads';
+
+export async function markConversationRead(conversation: Conversation): Promise<void> {
+  const { error } = await supabase
+    .from(CONVERSATION_READS_TABLE)
+    .upsert({
+      conversation_key: conversation.conversation_key,
+      read_through: conversation.last_message_time,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'conversation_key' });
+
+  if (error) {
+    console.error('Error marking conversation as read:', error);
+    throw error;
+  }
+}
+
+async function fetchConversationReadStates(): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from(CONVERSATION_READS_TABLE)
+    .select('conversation_key,read_through');
+
+  if (error) {
+    console.error('Error fetching conversation read states:', error);
+    return {};
+  }
+
+  return Object.fromEntries(
+    (data || []).map((row) => [String(row.conversation_key), String(row.read_through)])
+  );
 }
 
 export async function uploadImage(file: File): Promise<string | null> {

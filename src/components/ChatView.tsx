@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
-import { fetchMessages, getLatestAiDraft } from '@/lib/supabase';
+import { fetchMessages, getLatestAiDraft, markConversationRead } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge, LockKeyhole } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge, LockKeyhole, MailOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,6 +20,7 @@ import { getWhatsappReplyWindowDescription, getWhatsappReplyWindowStatus } from 
 interface ChatViewProps {
   conversation: Conversation | null;
   onBack?: () => void;
+  onMarkedRead?: () => void;
 }
 
 const SEND_TIMEOUT_MS = 45_000;
@@ -27,7 +28,7 @@ const STUCK_SEND_RECOVERY_MS = 60_000;
 const MESSAGE_LOAD_TIMEOUT_MS = 15_000;
 const ATTACHMENT_READ_TIMEOUT_MS = 20_000;
 
-export function ChatView({ conversation, onBack }: ChatViewProps) {
+export function ChatView({ conversation, onBack, onMarkedRead }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -39,6 +40,7 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [markingRead, setMarkingRead] = useState(false);
   const messagesScrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -194,6 +196,29 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
         revokePreviewUrl(currentPreview);
         return URL.createObjectURL(file);
       });
+    }
+  };
+
+  const handleMarkAsRead = async () => {
+    if (!conversation || markingRead) return;
+
+    setMarkingRead(true);
+    try {
+      await markConversationRead(conversation);
+      toast({
+        title: 'Marked as read',
+        description: 'This conversation will return when a new message arrives.',
+      });
+      onMarkedRead?.();
+    } catch (error) {
+      console.error('Failed to mark conversation as read:', error);
+      toast({
+        title: 'Could not mark as read',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setMarkingRead(false);
     }
   };
 
@@ -500,6 +525,17 @@ export function ChatView({ conversation, onBack }: ChatViewProps) {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleMarkAsRead}
+              className="h-8 w-8"
+              title="Mark as read"
+              aria-label="Mark as read"
+              disabled={loading || markingRead}
+            >
+              {markingRead ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailOpen className="h-4 w-4" />}
+            </Button>
             <Button
               variant="ghost"
               size="icon"

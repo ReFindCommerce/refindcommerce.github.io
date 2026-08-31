@@ -18,6 +18,7 @@ import { normalizeCompactText, normalizeSearchText } from '@/lib/textFormat';
 interface ConversationListProps {
   selectedConversationKey: string | null;
   onSelectConversation: (conversation: Conversation) => void;
+  refreshToken?: number;
 }
 
 const CONVERSATION_ARCHIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
@@ -25,7 +26,7 @@ const ANSWERED_ARCHIVE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 const SILENT_REFRESH_INTERVAL_MS = 20_000;
 const CONVERSATION_REFRESH_TIMEOUT_MS = 15_000;
 
-export function ConversationList({ selectedConversationKey, onSelectConversation }: ConversationListProps) {
+export function ConversationList({ selectedConversationKey, onSelectConversation, refreshToken = 0 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,7 +101,7 @@ export function ConversationList({ selectedConversationKey, onSelectConversation
 
   useEffect(() => {
     loadConversations(true);
-  }, [loadConversations]);
+  }, [loadConversations, refreshToken]);
 
   useEffect(() => {
     const refreshIfActive = () => {
