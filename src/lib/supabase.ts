@@ -3,7 +3,11 @@ import type { Message, Conversation, Channel, InboxFailure } from '@/types/inbox
 import { formatSuggestedReply } from '@/lib/textFormat';
 import { buildEnglishFallbackReply, shouldReplaceWithEnglishFallback } from '@/lib/languageRules';
 import { applyProductFactGuard } from '@/lib/productFactGuards';
-import { isConversationMarkedRead } from '@/lib/inboxReadState';
+import {
+  buildConversationReadMarker,
+  isConversationMarkedRead,
+  parseConversationReadMarker,
+} from '@/lib/inboxReadState';
 
 const supabaseUrl = 'https://dquighsffvqgbizedatd.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxdWlnaHNmZnZxZ2JpemVkYXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyODc0OTMsImV4cCI6MjA4Mzg2MzQ5M30.mTOr7xTBerM2Z7c-cxdYSw0AadfTPYJeR4U_gkpTc6I';
@@ -219,16 +223,40 @@ export async function fetchConversations(filters?: {
   return conversations;
 }
 
-const CONVERSATION_READS_TABLE = 'inbox_conversation_reads';
-
 export async function markConversationRead(conversation: Conversation): Promise<void> {
+  const { data, error: fetchError } = await supabase
+    .from(HIDDEN_THREADS_TABLE)
+    .select('thread_id');
+
+  if (fetchError) {
+    console.error('Error fetching conversation read states:', fetchError);
+    throw fetchError;
+  }
+
+  const previousMarkers = (data || [])
+    .map((row) => String(row.thread_id))
+    .filter((threadId) => parseConversationReadMarker(threadId)?.conversationKey === conversation.conversation_key);
+
+  if (previousMarkers.length > 0) {
+    const { error: deleteError } = await supabase
+      .from(HIDDEN_THREADS_TABLE)
+      .delete()
+      .in('thread_id', previousMarkers);
+
+    if (deleteError) {
+      console.error('Error replacing conversation read state:', deleteError);
+      throw deleteError;
+    }
+  }
+
   const { error } = await supabase
-    .from(CONVERSATION_READS_TABLE)
-    .upsert({
-      conversation_key: conversation.conversation_key,
-      read_through: conversation.last_message_time,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'conversation_key' });
+    .from(HIDDEN_THREADS_TABLE)
+    .insert({
+      thread_id: buildConversationReadMarker(
+        conversation.conversation_key,
+        conversation.last_message_time
+      ),
+    });
 
   if (error) {
     console.error('Error marking conversation as read:', error);
@@ -238,17 +266,24 @@ export async function markConversationRead(conversation: Conversation): Promise<
 
 async function fetchConversationReadStates(): Promise<Record<string, string>> {
   const { data, error } = await supabase
-    .from(CONVERSATION_READS_TABLE)
-    .select('conversation_key,read_through');
+    .from(HIDDEN_THREADS_TABLE)
+    .select('thread_id');
 
   if (error) {
     console.error('Error fetching conversation read states:', error);
     return {};
   }
 
-  return Object.fromEntries(
-    (data || []).map((row) => [String(row.conversation_key), String(row.read_through)])
-  );
+  return (data || []).reduce<Record<string, string>>((states, row) => {
+    const parsed = parseConversationReadMarker(String(row.thread_id));
+    if (!parsed) return states;
+
+    const existing = states[parsed.conversationKey];
+    if (!existing || Date.parse(parsed.readThrough) > Date.parse(existing)) {
+      states[parsed.conversationKey] = parsed.readThrough;
+    }
+    return states;
+  }, {});
 }
 
 export async function uploadImage(file: File): Promise<string | null> {
@@ -482,7 +517,9 @@ export async function fetchHiddenThreadIds(): Promise<string[]> {
     return [];
   }
 
-  return (data || []).map(item => item.thread_id);
+  return (data || [])
+    .map(item => item.thread_id)
+    .filter(threadId => !parseConversationReadMarker(String(threadId)));
 }
 
 export async function addHiddenThreads(threadIds: string[]): Promise<void> {

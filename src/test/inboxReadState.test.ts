@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isConversationMarkedRead } from '@/lib/inboxReadState';
+import {
+  buildConversationReadMarker,
+  isConversationMarkedRead,
+  parseConversationReadMarker,
+} from '@/lib/inboxReadState';
 
 const conversation = {
   conversation_key: 'gmail:thread-1:support@easytag.app',
@@ -29,5 +33,21 @@ describe('conversation read state', () => {
     }, {
       [conversation.conversation_key]: '2026-08-31T10:00:00.000Z',
     })).toBe(false);
+  });
+
+  it('round-trips a namespaced read marker', () => {
+    const marker = buildConversationReadMarker(
+      conversation.conversation_key,
+      conversation.last_message_time
+    );
+
+    expect(parseConversationReadMarker(marker)).toEqual({
+      conversationKey: conversation.conversation_key,
+      readThrough: conversation.last_message_time,
+    });
+  });
+
+  it('does not treat filtered contacts as read markers', () => {
+    expect(parseConversationReadMarker('billing@tm1.openai.com')).toBeNull();
   });
 });
