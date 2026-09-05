@@ -24,6 +24,8 @@ jobs:
           else
             echo "Skipping inbox workflow validation because N8N_API_KEY is not configured."
           fi
+      - name: Validate WhatsApp support follow-up workflow
+        run: npm run validate:whatsapp-support-follow-up
       - run: npm run build
       - name: Add single-page app fallback
         run: cp dist/index.html dist/404.html
