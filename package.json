@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate:inbox": "node scripts/validate-inbox-workflows.mjs"
+    "validate:inbox": "node scripts/validate-inbox-workflows.mjs",
+    "build:whatsapp-support-follow-up": "node scripts/build-whatsapp-support-follow-up-workflow.mjs",
+    "validate:whatsapp-support-follow-up": "node scripts/validate-whatsapp-support-follow-up.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

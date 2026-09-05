@@ -3,11 +3,22 @@ import { Conversation, Message, CHANNEL_WEBHOOKS } from '@/types/inbox';
 import { fetchMessages, getLatestAiDraft, markConversationRead } from '@/lib/supabase';
 import { getChannelBadgeClass, getChannelIcon } from '@/lib/channelUtils';
 import { MessageBubble } from './MessageBubble';
-import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge, LockKeyhole, MailOpen } from 'lucide-react';
+import { Send, ImagePlus, X, Loader2, ArrowLeft, User, RefreshCw, Languages, ExternalLink, Gauge, LockKeyhole, MailOpen, MessageSquareReply } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { clearDraft, loadDraftState, saveDraft, setActiveDraftState } from '@/lib/draftState';
@@ -16,6 +27,11 @@ import { cleanMessageText, formatSuggestedReply } from '@/lib/textFormat';
 import { useAuthGate } from './AuthGate';
 import { assertGmailSenderRule } from '@/lib/gmailSenderRules';
 import { getWhatsappReplyWindowDescription, getWhatsappReplyWindowStatus } from '@/lib/whatsappReplyWindow';
+import {
+  buildWhatsappSupportFollowUpPayload,
+  WHATSAPP_SUPPORT_FOLLOW_UP_ENDPOINT,
+  WHATSAPP_SUPPORT_FOLLOW_UP_TEMPLATE,
+} from '@/lib/whatsappSupportFollowUp';
 
 interface ChatViewProps {
   conversation: Conversation | null;
@@ -41,6 +57,7 @@ export function ChatView({ conversation, onBack, onMarkedRead }: ChatViewProps) 
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [markingRead, setMarkingRead] = useState(false);
+  const [sendingSupportFollowUp, setSendingSupportFollowUp] = useState(false);
   const messagesScrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -415,6 +432,54 @@ export function ChatView({ conversation, onBack, onMarkedRead }: ChatViewProps) 
       setSending(false);
     }
   };
+
+  const handleSendSupportFollowUp = async () => {
+    if (!conversation || sendingSupportFollowUp) return;
+
+    if (!navigator.onLine) {
+      toast({
+        title: 'You appear to be offline',
+        description: 'Please reconnect, then try sending again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSendingSupportFollowUp(true);
+    try {
+      const payload = buildWhatsappSupportFollowUpPayload(
+        conversation,
+        messages,
+        crypto.randomUUID(),
+        new Date().toISOString()
+      );
+      const response = await postJsonWithTimeout(
+        WHATSAPP_SUPPORT_FOLLOW_UP_ENDPOINT,
+        payload,
+        SEND_TIMEOUT_MS
+      );
+
+      if (!response.ok) {
+        throw new Error(await getWebhookFailureMessage(response));
+      }
+
+      toast({
+        title: 'Follow-up sent',
+        description: 'Normal WhatsApp replies will reopen after the customer responds.',
+      });
+      window.setTimeout(loadMessages, 1000);
+    } catch (error) {
+      console.error('Error sending WhatsApp support follow-up:', error);
+      const errorMessage = error instanceof Error ? error.message : 'The follow-up could not be sent.';
+      toast({
+        title: 'Follow-up not sent',
+        description: getSendErrorDescription(errorMessage, isAbortError(error)),
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingSupportFollowUp(false);
+    }
+  };
   loadMessagesRef.current = loadMessages;
 
   useEffect(() => {
@@ -718,9 +783,46 @@ export function ChatView({ conversation, onBack, onMarkedRead }: ChatViewProps) 
           </p>
         )}
         {whatsappReplyWindowDescription && (
-          <p className="text-xs text-destructive mt-2">
-            {whatsappReplyWindowDescription}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="min-w-0 flex-1 text-xs text-destructive">
+              {whatsappReplyWindowDescription}
+            </p>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={sendingSupportFollowUp}
+                >
+                  {sendingSupportFollowUp ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageSquareReply className="mr-2 h-4 w-4" />
+                  )}
+                  Send follow-up
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Send approved WhatsApp follow-up?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This sends the fixed approved template below. The normal reply box stays locked until the customer responds.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="rounded-md border bg-muted/40 p-3 text-sm text-foreground">
+                  {WHATSAPP_SUPPORT_FOLLOW_UP_TEMPLATE.preview}
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleSendSupportFollowUp}>
+                    Send follow-up
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         )}
       </div>
     </div>
@@ -821,7 +923,7 @@ function summarizeResponseDetails(details: string): string {
 
   try {
     const parsed = JSON.parse(trimmed);
-    const message = parsed.message || parsed.error || parsed.description;
+    const message = parsed.message || parsed.error || parsed.description || parsed.reason;
     if (typeof message === 'string') {
       return truncateErrorText(message);
     }
